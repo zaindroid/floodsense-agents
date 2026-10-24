@@ -591,6 +591,9 @@ def report(run: dict | None) -> dict[str, Any]:
         "generated_at": now_utc(),
         "run_id": run.get("run_id"),
         "event_id": run.get("event_id"),
+        # A report over a stored run is only as live as the run under it.
+        "served_from": run.get("served_from"),
+        "cached_at": run.get("cached_at"),
         "steps": steps,
         "handoffs": handoffs(run),
         "loops": {

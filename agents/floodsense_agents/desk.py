@@ -183,6 +183,8 @@ def record(run: dict) -> dict[str, Any]:
         "event_id": run.get("event_id"),
         "event": run.get("event"),
         "run_id": run.get("run_id"),
+        "served_from": run.get("served_from"),
+        "cached_at": run.get("cached_at"),
         "question": (run.get("request") or {}).get("question"),
         "summary": run.get("summary"),
         "figures": summarise(run),

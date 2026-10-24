@@ -204,6 +204,15 @@ main {
   text-wrap: balance;
 }
 
+.stale {
+  border-left: 3px solid var(--hold);
+  background: var(--wash);
+  padding: 9px 12px;
+  margin-bottom: 18px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
 .figs {
   display: flex;
   flex-wrap: wrap;

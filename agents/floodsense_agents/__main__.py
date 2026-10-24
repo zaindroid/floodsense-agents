@@ -50,7 +50,7 @@ from fastapi.responses import (
 )
 
 from floodsense_agents import __version__
-from floodsense_agents import desk
+from floodsense_agents import desk, labelling
 from floodsense_agents.models import ApprovalDecision, RunRequest
 from floodsense_agents.readiness import report as readiness_report
 from floodsense_agents.verify import report as verify_report
@@ -92,9 +92,18 @@ def set_runtime(rt: Runtime) -> None:
 
 
 def _live(body: dict) -> dict:
-    body.setdefault("served_from", "live")
-    body.setdefault("cached_at", None)
-    return body
+    return labelling.labelled(body)
+
+
+def _stored(run_id: str) -> dict:
+    """A snapshot of a run computed earlier. Serving it as live would be a lie."""
+    rt = runtime()
+    run = rt.snapshot(run_id)
+    row = next((r for r in rt.past() if r["run_id"] == run_id), None)
+    if row and run.get("served_from") == labelling.LIVE:
+        run["served_from"] = labelling.CACHE
+        run["cached_at"] = row.get("created_at")
+    return run
 
 
 _TYPES = {".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
@@ -178,12 +187,13 @@ def desk_event(event_id: str):
     rt = runtime()
     row = next((r for r in rt.past() if r.get("event_id") == event_id), None)
     if row is not None:
-        run = rt.snapshot(row["run_id"])
+        run = _stored(row["run_id"])
     else:
         try:
             run = rt.start(RunRequest(question=_DESK_QUESTION, event_id=event_id))
         except KeyError as e:
             raise HTTPException(400, str(e).strip('"')) from e
+    run = labelling.labelled(run)
     return _live({"run": run, "figures": desk.summarise(run), "released": desk.is_released(run)})
 
 
@@ -194,7 +204,7 @@ def desk_dispatch_target():
 
 
 def _released_run(run_id: str) -> dict:
-    run = runtime().snapshot(run_id)
+    run = _stored(run_id)
     if not desk.is_released(run):
         raise HTTPException(409, "nothing is released until a reviewer approves or edits")
     return run
@@ -218,12 +228,12 @@ def run_exposure_csv(run_id: str):
 @app.get("/runs/{run_id}/verify", include_in_schema=False)
 def run_verify(run_id: str):
     """Every agent step, checked against the run's own record."""
-    return _live(verify_report(runtime().snapshot(run_id)))
+    return _live(verify_report(_stored(run_id)))
 
 
 @app.get("/runs/{run_id}/record", include_in_schema=False)
 def run_record(run_id: str):
-    return _live(desk.record(runtime().snapshot(run_id)))
+    return _live(desk.record(_stored(run_id)))
 
 
 @app.post("/runs/{run_id}/dispatch", include_in_schema=False)
@@ -239,7 +249,7 @@ def readiness(run_id: str | None = None):
     if run_id is None:
         past = rt.past(limit=1)
         run_id = past[0]["run_id"] if past else None
-    run = rt.snapshot(run_id) if run_id else {}
+    run = _stored(run_id) if run_id else {}
     routes = {getattr(r, "path", "") for r in app.routes}
     return _live(readiness_report(run, rt.deps, routes))
 
@@ -343,7 +353,7 @@ def past_runs(limit: int = 50):
 @app.get("/runs/{run_id}")
 def get_run(run_id: str):
     try:
-        return _live(runtime().snapshot(run_id))
+        return _live(_stored(run_id))
     except RunNotFound:
         raise HTTPException(404, f"run {run_id} not found")
 

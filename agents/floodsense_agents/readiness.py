@@ -574,6 +574,8 @@ def report(run: dict | None, deps: Any = None, routes: set[str] | None = None) -
     return {
         "generated_at": now_utc(),
         "run_id": run.get("run_id"),
+        "served_from": run.get("served_from"),
+        "cached_at": run.get("cached_at"),
         "schema": settings.schema,
         "live_data": settings.live_data,
         "rungs": rungs,

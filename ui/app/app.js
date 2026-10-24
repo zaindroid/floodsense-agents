@@ -129,6 +129,7 @@ function drawCase(eventId) {
   const ap = run.approval || {};
   const decided = ap.status && ap.status !== "awaiting";
   screen.innerHTML =
+    stale(run) +
     '<h1 class="verdict">' +
     (figures.policies
       ? figures.policies +
@@ -400,6 +401,13 @@ function workingHtml(run) {
 
 const pct = (x) => Math.round(x * 100) + "%";
 
+// GAMEPLAN: cached or replayed output is never presented as live. The service
+// decides the wording; this only renders it.
+const stale = (body) =>
+  body && body.label && body.label.live === false
+    ? '<p class="stale">' + esc(body.label.text) + "</p>"
+    : "";
+
 /* Record --------------------------------------------------------------------- */
 
 async function record(eventId) {
@@ -428,7 +436,9 @@ function drawRecord(r) {
   const ap = r.approval || {};
   const j = r.judge_summary || {};
   screen.innerHTML =
-    '<div class="record"><h1>Decision record</h1><p class="meta">' +
+    '<div class="record">' +
+    stale(r) +
+    '<h1>Decision record</h1><p class="meta">' +
     esc((r.event && r.event.name) || r.event_id) +
     " · run " +
     esc(r.run_id) +
