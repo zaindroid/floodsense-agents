@@ -808,7 +808,7 @@ textarea {
 /* Working ------------------------------------------------------------------ */
 
 details.work {
-  margin-top: 26px;
+  margin: 26px 0 34px;
   border-top: 1px solid var(--ink);
 }
 
