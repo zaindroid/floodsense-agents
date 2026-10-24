@@ -9,6 +9,7 @@ GET  /desk/events                  every known event and the case standing on it
 GET  /desk/events/{id}             one case; starts it if nobody has
 GET  /runs/{id}/outbound           approved messages per exposed site (never sent from here)
 GET  /runs/{id}/exposure.csv       exposed policies for the claims system
+GET  /runs/{id}/verify             every agent step checked, plus which data path it used
 GET  /runs/{id}/record             the decision record: answer, sources, scores, signature
 POST /runs/{id}/dispatch           post the decision to DECISION_WEBHOOK, off unless set
 GET  /console                      the earlier single-page console
@@ -50,6 +51,7 @@ from floodsense_agents import __version__
 from floodsense_agents import desk
 from floodsense_agents.models import ApprovalDecision, RunRequest
 from floodsense_agents.readiness import report as readiness_report
+from floodsense_agents.verify import report as verify_report
 from floodsense_agents.runtime import NotAwaitingApproval, RunNotFound, Runtime
 from floodsense_agents.settings import settings
 
@@ -182,6 +184,12 @@ def run_exposure_csv(run_id: str):
         media_type="text/csv",
         headers={"content-disposition": f'attachment; filename="exposure-{run_id}.csv"'},
     )
+
+
+@app.get("/runs/{run_id}/verify", include_in_schema=False)
+def run_verify(run_id: str):
+    """Every agent step, checked against the run's own record."""
+    return _live(verify_report(runtime().snapshot(run_id)))
 
 
 @app.get("/runs/{run_id}/record", include_in_schema=False)

@@ -169,10 +169,15 @@ function drawCase(eventId) {
     "</ol>" +
     (decided ? signedHtml(ap, figures) : decideHtml()) +
     (released ? artifactsHtml(run) : "") +
-    workingHtml(run);
+    workingHtml(run) +
+    '<p class="note"><button class="ghost" id="stepwise">' +
+    "Check every agent step</button></p>";
 
   if (!decided) wireDecide(eventId);
   if (released) wireArtifacts(eventId, run);
+  document.getElementById("stepwise").addEventListener("click", () => {
+    window.showWorking(run.run_id);
+  });
 }
 
 function decideHtml() {
