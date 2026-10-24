@@ -15,6 +15,7 @@ os.environ.setdefault("CHECKPOINTER", "memory")
 os.environ.setdefault("ZETARIS_MODE", "fake")
 os.environ.setdefault("LLM_MODE", "fake")
 
+from fastapi import HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from langgraph.checkpoint.memory import MemorySaver  # noqa: E402
 
@@ -49,11 +50,26 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("text/html", r.headers["content-type"])
         self.assertIn("FloodSense EU", r.text)
 
-    def test_mock_is_served(self) -> None:
-        r = self.c.get("/mock")
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("text/html", r.headers["content-type"])
-        self.assertIn("event review", r.text)
+    def test_mock_serves_both_views_and_their_data(self) -> None:
+        plain = self.c.get("/mock")
+        self.assertEqual(plain.status_code, 200)
+        self.assertIn("text/html", plain.headers["content-type"])
+        self.assertIn("Analyst view", plain.text)
+
+        analyst = self.c.get("/mock/analyst")
+        self.assertEqual(analyst.status_code, 200)
+        self.assertIn("Plain view", analyst.text)
+
+        data = self.c.get("/mock/data.js")
+        self.assertEqual(data.status_code, 200)
+        self.assertIn("javascript", data.headers["content-type"])
+
+    def test_mock_serves_nothing_outside_its_own_folder(self) -> None:
+        self.assertEqual(self.c.get("/mock/console.html").status_code, 404)
+        for name in ("..", "../console.html", "..\\console.html"):
+            with self.assertRaises(HTTPException) as caught:
+                service._mock_page(name)
+            self.assertEqual(caught.exception.status_code, 404)
 
     def test_ready_and_version(self) -> None:
         ready = self.c.get("/ready").json()

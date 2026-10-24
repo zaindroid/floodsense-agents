@@ -4,7 +4,8 @@ Routes follow the contract in docs/GAMEPLAN.md §5.5. Every response carries
 served_from (live | cache | replay) and cached_at.
 
 GET  /                             review console, one page, served from console.html
-GET  /mock                         static design mock of the console, served from ui/mock
+GET  /mock                         design mock, plain view for a non-specialist (ui/mock)
+GET  /mock/analyst                 design mock, analyst view: chain, judge, playbook, decision
 GET  /health                       liveness: service, graph, version. Touches nothing.
 GET  /ready                        readiness: Zetaris answers a trivial query (503 if not)
 GET  /version                      build sha and timestamp
@@ -41,15 +42,8 @@ app = FastAPI(title="FloodSense EU — agents", version=__version__)
 CONSOLE = Path(__file__).resolve().parent / "console.html"
 # ui/mock sits beside the package in the image and two levels up in the repo.
 _HERE = Path(__file__).resolve().parent
-MOCK = next(
-    (
-        p
-        for p in (
-            _HERE.parent / "ui" / "mock" / "index.html",
-            _HERE.parent.parent / "ui" / "mock" / "index.html",
-        )
-        if p.exists()
-    ),
+MOCK_DIR = next(
+    (p for p in (_HERE.parent / "ui" / "mock", _HERE.parent.parent / "ui" / "mock") if p.is_dir()),
     None,
 )
 _rt: Runtime | None = None
@@ -73,6 +67,16 @@ def _live(body: dict) -> dict:
     return body
 
 
+def _mock_page(name: str) -> FileResponse:
+    if MOCK_DIR is None:
+        raise HTTPException(404, "ui/mock was not copied into this build")
+    path = (MOCK_DIR / name).resolve()
+    # Direct children only. {name} never contains a slash, but ".." would.
+    if path.parent != MOCK_DIR.resolve() or not path.is_file():
+        raise HTTPException(404, f"no mock file named {name}")
+    return FileResponse(path, media_type="text/javascript" if path.suffix == ".js" else "text/html")
+
+
 @app.get("/", include_in_schema=False)
 def console():
     return FileResponse(CONSOLE, media_type="text/html")
@@ -80,9 +84,17 @@ def console():
 
 @app.get("/mock", include_in_schema=False)
 def mock():
-    if MOCK is None:
-        raise HTTPException(404, "ui/mock was not copied into this build")
-    return FileResponse(MOCK, media_type="text/html")
+    return _mock_page("index.html")
+
+
+@app.get("/mock/analyst", include_in_schema=False)
+def mock_analyst():
+    return _mock_page("analyst.html")
+
+
+@app.get("/mock/{name}", include_in_schema=False)
+def mock_asset(name: str):
+    return _mock_page(name)
 
 
 def _dep_name(rt: Runtime, attr: str) -> str:

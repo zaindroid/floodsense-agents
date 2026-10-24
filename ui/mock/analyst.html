@@ -1,0 +1,1206 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FloodSense EU — event review</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #fafaf8;
+        --ink: #1b1f24;
+        --ink-soft: #5c636c;
+        --rule: #dcdcd6;
+        --river: #35607a;
+        --river-pale: #8aabbd;
+        --gauge: #9a6b1f;
+        --pass: #40674f;
+        --wash: #f2f2ee;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--river);
+        outline-offset: 2px;
+      }
+
+      h1,
+      h2,
+      p,
+      dl,
+      dd,
+      dt,
+      ol,
+      ul,
+      figure {
+        margin: 0;
+      }
+
+      ol,
+      ul {
+        padding: 0;
+        list-style: none;
+      }
+
+      .shell {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* Masthead ----------------------------------------------------------- */
+
+      .masthead {
+        border-bottom: 1px solid var(--ink);
+        padding: 16px 0 12px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 24px;
+      }
+
+      .wordmark {
+        font-size: 16px;
+        font-weight: 600;
+        margin-right: auto;
+      }
+
+      .wordmark span {
+        font-weight: 400;
+        color: var(--ink-soft);
+      }
+
+      .mast-meta {
+        display: flex;
+        gap: 24px;
+        flex-wrap: wrap;
+      }
+
+      .mast-meta div {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .mast-meta dt {
+        font-size: 11.5px;
+        color: var(--ink-soft);
+        line-height: 1.3;
+      }
+
+      .mast-meta dd {
+        font-size: 13.5px;
+        line-height: 1.3;
+      }
+
+      .switch {
+        font-size: 13.5px;
+        color: var(--ink-soft);
+        text-decoration: none;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .switch:hover {
+        color: var(--ink);
+        border-bottom-color: var(--ink);
+      }
+
+      /* Verdict strip ------------------------------------------------------- */
+
+      .strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 40px;
+        padding: 22px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .strip div {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .strip dt {
+        font-size: 11.5px;
+        color: var(--ink-soft);
+        order: 2;
+        margin-top: 3px;
+      }
+
+      .strip dd {
+        font-size: 23px;
+        font-weight: 500;
+        letter-spacing: -0.015em;
+        line-height: 1.1;
+      }
+
+      .strip .held {
+        color: var(--gauge);
+      }
+
+      /* Answer -------------------------------------------------------------- */
+
+      .band {
+        padding: 28px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .answer {
+        font-size: 18px;
+        line-height: 1.6;
+        max-width: 62ch;
+      }
+
+      .cite {
+        font: inherit;
+        font-size: 0.78em;
+        font-weight: 500;
+        vertical-align: 0.25em;
+        color: var(--river);
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--river-pale);
+        padding: 0 1px;
+        margin: 0 1px;
+        cursor: pointer;
+      }
+
+      .cite:hover,
+      .cite[aria-expanded="true"] {
+        background: var(--wash);
+        border-bottom-color: var(--river);
+      }
+
+      .evidence {
+        margin-top: 20px;
+        border-top: 1px solid var(--ink);
+        padding-top: 12px;
+        max-width: 74ch;
+      }
+
+      .evidence-head {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      .evidence-head b {
+        font-size: 13.5px;
+        color: var(--ink);
+      }
+
+      .evidence-claim {
+        margin-top: 6px;
+        font-size: 15.5px;
+        line-height: 1.5;
+      }
+
+      .evidence-grid {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 6.5rem 1fr;
+        gap: 4px 16px;
+        font-size: 13.5px;
+      }
+
+      .evidence-grid dt {
+        color: var(--ink-soft);
+      }
+
+      pre {
+        margin: 12px 0 0;
+        padding: 8px 12px;
+        background: var(--wash);
+        font: inherit;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+
+      .link {
+        font: inherit;
+        font-size: 13px;
+        color: var(--ink-soft);
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--rule);
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .link:hover {
+        color: var(--ink);
+        border-bottom-color: var(--ink);
+      }
+
+      .dismiss {
+        margin-left: auto;
+      }
+
+      /* Chart ---------------------------------------------------------------- */
+
+      .chart-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 24px;
+        margin-bottom: 14px;
+      }
+
+      .chart-title {
+        font-size: 13px;
+        font-weight: 600;
+        margin-right: auto;
+      }
+
+      .chart-title em {
+        display: block;
+        font-style: normal;
+        font-weight: 400;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        margin-top: 2px;
+      }
+
+      .readout {
+        display: flex;
+        gap: 24px;
+      }
+
+      .readout div {
+        min-width: 5.5rem;
+      }
+
+      .readout dt {
+        font-size: 11.5px;
+        color: var(--ink-soft);
+        line-height: 1.3;
+      }
+
+      .readout dd {
+        font-size: 15px;
+        line-height: 1.35;
+      }
+
+      #chart {
+        display: block;
+        width: 100%;
+        touch-action: none;
+      }
+
+      .legend {
+        display: flex;
+        gap: 16px;
+        margin-top: 10px;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        flex-wrap: wrap;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .key {
+        width: 10px;
+        height: 10px;
+        flex: none;
+      }
+
+      .key-line {
+        width: 14px;
+        height: 2px;
+        background: var(--ink);
+      }
+
+      /* Columns --------------------------------------------------------------- */
+
+      .columns {
+        display: grid;
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+        gap: 0 44px;
+      }
+
+      .columns > * {
+        min-width: 0;
+      }
+
+      .col-right {
+        border-left: 1px solid var(--rule);
+        padding-left: 44px;
+      }
+
+      .group {
+        padding: 28px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .group:last-child {
+        border-bottom: 0;
+      }
+
+      .group > h2 {
+        font-size: 13px;
+        font-weight: 600;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--ink);
+      }
+
+      /* Chain ------------------------------------------------------------------ */
+
+      .chain li {
+        display: grid;
+        grid-template-columns: 2rem 1fr auto;
+        gap: 12px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .chain li:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .chain-id {
+        font-weight: 600;
+        font-size: 13.5px;
+        color: var(--ink-soft);
+      }
+
+      .chain-link {
+        font-size: 11.5px;
+        color: var(--ink-soft);
+      }
+
+      .chain-statement {
+        font-size: 15.5px;
+        line-height: 1.4;
+      }
+
+      .checks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+
+      .check {
+        font-size: 12px;
+        color: var(--ink-soft);
+        padding: 1px 8px 1px 7px;
+        border-left: 2px solid var(--pass);
+        background: var(--wash);
+      }
+
+      .verdict-word {
+        font-size: 12.5px;
+        color: var(--pass);
+        white-space: nowrap;
+      }
+
+      /* Ledger ------------------------------------------------------------------ */
+
+      .ledger {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14.5px;
+      }
+
+      .ledger th {
+        font-weight: 400;
+        font-size: 11.5px;
+        color: var(--ink-soft);
+        text-align: right;
+        padding: 8px 0 4px;
+      }
+
+      .ledger th:first-child {
+        text-align: left;
+      }
+
+      .ledger td {
+        padding: 7px 0;
+        border-top: 1px solid var(--rule);
+        text-align: right;
+      }
+
+      .ledger td:first-child {
+        text-align: left;
+      }
+
+      .ledger tbody tr:hover {
+        background: var(--wash);
+      }
+
+      .ledger tfoot td {
+        border-top: 1px solid var(--ink);
+        font-weight: 600;
+        padding-top: 8px;
+      }
+
+      .bar {
+        display: block;
+        height: 3px;
+        background: var(--river-pale);
+        margin: 5px 0 0 auto;
+      }
+
+      /* Playbook ------------------------------------------------------------------ */
+
+      .actions li {
+        padding: 14px 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .actions li:last-child {
+        border-bottom: 0;
+      }
+
+      .action-top {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        font-size: 11.5px;
+        color: var(--ink-soft);
+      }
+
+      .state {
+        margin-left: auto;
+        font-size: 11.5px;
+        padding: 1px 7px;
+        border: 1px solid var(--gauge);
+        color: var(--gauge);
+        transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+      }
+
+      .state[data-state="released"] {
+        border-color: var(--pass);
+        color: #fff;
+        background: var(--pass);
+      }
+
+      .state[data-state="withheld"] {
+        border-color: var(--rule);
+        color: var(--ink-soft);
+      }
+
+      .action-head {
+        margin-top: 5px;
+        font-size: 15.5px;
+        line-height: 1.4;
+      }
+
+      .action-full {
+        margin-top: 8px;
+        font-size: 14px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+      }
+
+      .action-foot {
+        margin-top: 6px;
+        display: flex;
+        gap: 12px;
+        align-items: baseline;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+      }
+
+      /* Decision ------------------------------------------------------------------- */
+
+      .caution {
+        margin-top: 14px;
+        border-left: 2px solid var(--gauge);
+        padding: 2px 0 2px 12px;
+        font-size: 13.5px;
+        line-height: 1.5;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 20px;
+      }
+
+      button.act {
+        font: inherit;
+        font-size: 14px;
+        padding: 9px 15px;
+        border-radius: 3px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+        cursor: pointer;
+      }
+
+      button.act.quiet {
+        background: none;
+        color: var(--ink);
+        border-color: var(--rule);
+      }
+
+      button.act:hover {
+        background: #000;
+      }
+
+      button.act.quiet:hover {
+        background: var(--wash);
+        border-color: var(--ink);
+      }
+
+      button.act[disabled] {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      .edit {
+        margin-top: 14px;
+      }
+
+      .edit label {
+        display: block;
+        font-size: 13px;
+        color: var(--ink-soft);
+        margin-bottom: 6px;
+      }
+
+      .edit textarea {
+        font: inherit;
+        font-size: 14.5px;
+        width: 100%;
+        min-height: 5rem;
+        padding: 8px;
+        border: 1px solid var(--rule);
+        background: #fff;
+        color: var(--ink);
+        resize: vertical;
+      }
+
+      .edit textarea:focus {
+        border-color: var(--river);
+      }
+
+      .edit-controls {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .receipt {
+        margin-top: 14px;
+        border-top: 1px solid var(--ink);
+        padding-top: 12px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .receipt span {
+        display: block;
+        color: var(--ink-soft);
+        font-size: 13px;
+        margin-top: 2px;
+      }
+
+      .footer {
+        padding: 22px 0 44px;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        max-width: 72ch;
+      }
+
+      .flash {
+        animation: flash 900ms ease-out;
+      }
+
+      @keyframes flash {
+        from {
+          background: #efe4cd;
+        }
+        to {
+          background: transparent;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 1ms !important;
+          transition-duration: 1ms !important;
+        }
+      }
+
+      @media (max-width: 880px) {
+        .columns {
+          grid-template-columns: 1fr;
+        }
+
+        .col-right {
+          border-left: 0;
+          padding-left: 0;
+          border-top: 1px solid var(--rule);
+        }
+
+        .strip {
+          gap: 24px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .shell {
+          padding: 0 16px;
+        }
+
+        .answer {
+          font-size: 16.5px;
+        }
+
+        .chain li {
+          grid-template-columns: 1.6rem 1fr;
+        }
+
+        .verdict-word {
+          grid-column: 2;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead shell">
+      <div class="wordmark">FloodSense EU <span>— event review</span></div>
+      <dl class="mast-meta">
+        <div><dt>Event</dt><dd id="m-event"></dd></div>
+        <div><dt>Replay</dt><dd id="m-replay"></dd></div>
+        <div><dt>Status</dt><dd id="m-status">Awaiting approval</dd></div>
+      </dl>
+      <a class="switch" href="./">Plain view</a>
+    </header>
+
+    <main class="shell">
+      <dl class="strip">
+        <div><dd id="s-policies"></dd><dt>policies in the footprint</dt></div>
+        <div><dd id="s-sum"></dd><dt>sum insured, EUR</dt></div>
+        <div><dd id="s-judge"></dd><dt>judge, over 10 claims</dt></div>
+        <div><dd class="held" id="s-actions"></dd><dt>actions not yet released</dt></div>
+      </dl>
+
+      <section class="band">
+        <p class="answer" id="answer"></p>
+        <div class="evidence" id="evidence" hidden></div>
+      </section>
+
+      <section class="band">
+        <div class="chart-head">
+          <div class="chart-title">
+            Rain and river discharge, 29 October 2024
+            <em>Chiva and Turís rain gauges; Poyo ravine at Riba-roja</em>
+          </div>
+          <dl class="readout">
+            <div><dt>Hour, UTC</dt><dd id="r-hour">—</dd></div>
+            <div><dt>Chiva</dt><dd id="r-chiva">—</dd></div>
+            <div><dt>Turís</dt><dd id="r-turis">—</dd></div>
+            <div><dt>Poyo</dt><dd id="r-poyo">—</dd></div>
+          </dl>
+        </div>
+        <div class="chart-frame"><svg id="chart" tabindex="0" role="img"></svg></div>
+        <div class="legend">
+          <span><i class="key" style="background: var(--river-pale)"></i>Chiva rain, mm/h</span>
+          <span><i class="key" style="background: var(--river)"></i>Turís rain, mm/h</span>
+          <span><i class="key key-line"></i>Poyo discharge, m³/s</span>
+          <span>Pointer or arrow keys.</span>
+        </div>
+      </section>
+
+      <div class="columns">
+        <section>
+          <div class="group">
+            <h2>Chain and counter-checks</h2>
+            <ol class="chain" id="chain"></ol>
+          </div>
+          <div class="group">
+            <h2>Exposure inside the mapped footprint</h2>
+            <table class="ledger" id="exposure"></table>
+          </div>
+          <div class="group">
+            <h2>Judge</h2>
+            <table class="ledger" id="judge"></table>
+          </div>
+        </section>
+
+        <aside class="col-right">
+          <div class="group">
+            <h2>Playbook</h2>
+            <ol class="actions" id="playbook"></ol>
+          </div>
+          <div class="group">
+            <h2>Decision</h2>
+            <p class="caution" id="caution"></p>
+            <div class="controls">
+              <button class="act" id="approve">Approve and release</button>
+              <button class="act quiet" id="edit">Request an edit</button>
+              <button class="act quiet" id="reject">Hold and reject</button>
+            </div>
+            <form class="edit" id="editForm" hidden>
+              <label for="editText">What should change before release?</label>
+              <textarea
+                id="editText"
+                placeholder="Name the action and the wording you want."
+              ></textarea>
+              <div class="edit-controls">
+                <button class="act" type="submit">Send the edit</button>
+                <button class="act quiet" type="button" id="editCancel">Cancel</button>
+              </div>
+            </form>
+            <div class="receipt" id="receipt" hidden></div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        Static sample of one replayed run. Seed figures, not live readings, and awaiting
+        validation. The Poyo gauge stopped reporting at 18:00 UTC, so the peak is the last
+        reading taken.
+      </footer>
+    </main>
+
+    <script src="data.js"></script>
+    <script>
+      "use strict";
+
+      const $ = (id) => document.getElementById(id);
+      const hhmm = (h) => String(h).padStart(2, "0") + ":00";
+
+      /* Masthead and strip -------------------------------------------------- */
+
+      $("m-event").textContent = EVENT.id + " " + EVENT.place;
+      $("m-replay").textContent = EVENT.replay;
+      $("s-policies").textContent = TOTALS.policies + " of " + TOTALS.ofSites;
+      $("s-sum").textContent = fmt.format(TOTALS.sum);
+      $("s-judge").textContent = JUDGE.overall;
+      $("s-actions").textContent = PLAYBOOK.length;
+
+      /* Answer and evidence -------------------------------------------------- */
+
+      $("answer").innerHTML = ANSWER.map((part) =>
+        part.t
+          ? esc(part.t)
+          : "&thinsp;" +
+            part.c
+              .map(
+                (id) =>
+                  '<button class="cite" data-claim="' +
+                  id +
+                  '" aria-expanded="false">' +
+                  id +
+                  "</button>"
+              )
+              .join("")
+      ).join("");
+
+      let openClaim = null;
+
+      function showClaim(id) {
+        const claim = CLAIMS[id];
+        const view = VIEWS[claim.view];
+        $("evidence").innerHTML =
+          '<div class="evidence-head"><b>' +
+          esc(id) +
+          "</b><span>" +
+          esc(claim.kind) +
+          ' claim</span><button class="link dismiss" id="closeClaim">Close</button></div>' +
+          '<p class="evidence-claim">' +
+          esc(claim.text) +
+          '</p><dl class="evidence-grid"><dt>Figures</dt><dd>' +
+          esc(claim.figures) +
+          "</dd><dt>View</dt><dd>" +
+          esc(claim.view) +
+          "</dd><dt>Publisher</dt><dd>" +
+          esc(view.publisher) +
+          "</dd><dt>Licence</dt><dd>" +
+          esc(view.licence) +
+          '</dd></dl><button class="link" id="showSql">Show the query</button>' +
+          '<pre id="sql" hidden>' +
+          esc(view.sql) +
+          "</pre>";
+        $("evidence").hidden = false;
+        $("closeClaim").addEventListener("click", closeClaim);
+        $("showSql").addEventListener("click", (e) => {
+          const pre = $("sql");
+          pre.hidden = !pre.hidden;
+          e.target.textContent = pre.hidden ? "Show the query" : "Hide the query";
+        });
+        document
+          .querySelectorAll(".cite")
+          .forEach((b) => b.setAttribute("aria-expanded", String(b.dataset.claim === id)));
+        openClaim = id;
+        if (claim.hour != null) setCursor(claim.hour);
+      }
+
+      function closeClaim() {
+        $("evidence").hidden = true;
+        $("evidence").innerHTML = "";
+        document.querySelectorAll(".cite").forEach((b) => b.setAttribute("aria-expanded", "false"));
+        openClaim = null;
+      }
+
+      $("answer").addEventListener("click", (e) => {
+        const btn = e.target.closest(".cite");
+        if (!btn) return;
+        if (btn.dataset.claim === openClaim) closeClaim();
+        else showClaim(btn.dataset.claim);
+      });
+
+      /* Hydrograph ------------------------------------------------------------ */
+
+      const svg = $("chart");
+      const PAD = { l: 48, r: 12, t: 18, b: 28 };
+      const RAIN_BAND = 92;
+      const GAP = 22;
+      const Q_BAND = 172;
+      const HEIGHT = PAD.t + RAIN_BAND + GAP + Q_BAND + PAD.b;
+      const H0 = 9;
+      const HN = 20;
+      const RAIN_MAX = 185;
+      const Q_MAX = 2400;
+      let cursorHour = 16;
+      let plotW = 600;
+
+      const x = (h) => PAD.l + ((h - H0) / (HN - H0)) * plotW;
+      const yRain = (mm) => PAD.t + (mm / RAIN_MAX) * RAIN_BAND;
+      const qBase = PAD.t + RAIN_BAND + GAP + Q_BAND;
+      const yQ = (q) => qBase - (q / Q_MAX) * Q_BAND;
+
+      function drawChart() {
+        plotW = Math.max(240, (svg.parentNode.clientWidth || 600) - PAD.l - PAD.r);
+        svg.setAttribute("viewBox", "0 0 " + (plotW + PAD.l + PAD.r) + " " + HEIGHT);
+        svg.setAttribute("height", HEIGHT);
+        svg.setAttribute(
+          "aria-label",
+          "Rain at Chiva peaks at 96 mm in the hour to 14:00 and at Turís at 185 mm to 16:00. " +
+            "Poyo discharge rises from 6 to 2282 cubic metres a second by 17:00, then the gauge " +
+            "stops reporting."
+        );
+        svg.textContent = "";
+
+        [0, 1200, 2400].forEach((q) => {
+          svg.appendChild(
+            svgEl("line", {
+              x1: PAD.l,
+              x2: PAD.l + plotW,
+              y1: yQ(q),
+              y2: yQ(q),
+              stroke: q === 0 ? "var(--ink)" : "var(--rule)",
+            })
+          );
+          svg.appendChild(
+            svgEl("text", { x: PAD.l - 8, y: yQ(q) + 4, "text-anchor": "end", class: "ax" },
+              fmt.format(q))
+          );
+        });
+
+        svg.appendChild(
+          svgEl("line", { x1: PAD.l, x2: PAD.l + plotW, y1: PAD.t, y2: PAD.t, stroke: "var(--rule)" })
+        );
+        const bw = Math.min(11, (plotW / (HN - H0)) * 0.36);
+        for (let h = H0; h <= HN; h++) {
+          [
+            [RAIN_CHIVA[h], "var(--river-pale)", -1],
+            [RAIN_TURIS[h], "var(--river)", 1],
+          ].forEach(([mm, fill, side]) => {
+            if (!mm) return;
+            svg.appendChild(
+              svgEl("rect", {
+                x: x(h) + (side < 0 ? -bw - 1 : 1),
+                y: PAD.t,
+                width: bw,
+                height: Math.max(1, yRain(mm) - PAD.t),
+                fill: fill,
+              })
+            );
+          });
+        }
+        svg.appendChild(
+          svgEl("text", { x: x(16) + 14, y: yRain(RAIN_MAX) - 3, class: "ax strong" },
+            "185 mm in one hour")
+        );
+
+        const read = Object.keys(DISCHARGE).map(Number).sort((a, b) => a - b);
+        svg.appendChild(
+          svgEl("polyline", {
+            points: read.map((h) => x(h) + "," + yQ(DISCHARGE[h])).join(" "),
+            fill: "none",
+            stroke: "var(--ink)",
+            "stroke-width": 1.75,
+          })
+        );
+        read.forEach((h) =>
+          svg.appendChild(
+            svgEl("circle", { cx: x(h), cy: yQ(DISCHARGE[h]), r: 2.4, fill: "var(--ink)" })
+          )
+        );
+
+        const last = read[read.length - 1];
+        svg.appendChild(
+          svgEl("line", {
+            x1: x(last),
+            x2: x(GAUGE_LOST),
+            y1: yQ(DISCHARGE[last]),
+            y2: yQ(DISCHARGE[last]),
+            stroke: "var(--gauge)",
+            "stroke-width": 1.5,
+            "stroke-dasharray": "3 3",
+          })
+        );
+        svg.appendChild(
+          svgEl("circle", {
+            cx: x(GAUGE_LOST),
+            cy: yQ(DISCHARGE[last]),
+            r: 3,
+            fill: "var(--paper)",
+            stroke: "var(--gauge)",
+            "stroke-width": 1.5,
+          })
+        );
+        svg.appendChild(
+          svgEl("text", { x: x(GAUGE_LOST) + 8, y: yQ(DISCHARGE[last]) + 4, class: "ax gauge" },
+            "gauge stops reporting")
+        );
+
+        const alertX = x(ES_ALERT);
+        svg.appendChild(
+          svgEl("path", { d: "M" + (alertX - 4) + "," + (qBase + 7) + "h8l-4,-7z",
+            fill: "var(--gauge)" })
+        );
+        svg.appendChild(
+          svgEl(
+            "text",
+            { x: alertX, y: qBase + 21, "text-anchor": "middle", class: "ax gauge" },
+            "ES-Alert 19:11"
+          )
+        );
+
+        for (let h = H0; h <= HN; h += 3) {
+          svg.appendChild(
+            svgEl("text", { x: x(h), y: qBase + 21, "text-anchor": "middle", class: "ax" }, hhmm(h))
+          );
+        }
+
+        svg.appendChild(svgEl("line", { id: "cursor", stroke: "var(--river)", "stroke-width": 1 }));
+
+        const style = svgEl("style");
+        style.textContent =
+          ".ax{font:11.5px Archivo,sans-serif;fill:var(--ink-soft)}" +
+          ".strong{fill:var(--river)}.gauge{fill:var(--gauge)}";
+        svg.appendChild(style);
+        paintCursor();
+      }
+
+      function paintCursor() {
+        const line = svg.querySelector("#cursor");
+        if (!line) return;
+        line.setAttribute("x1", x(cursorHour));
+        line.setAttribute("x2", x(cursorHour));
+        line.setAttribute("y1", PAD.t);
+        line.setAttribute("y2", qBase);
+        const q = DISCHARGE[cursorHour];
+        $("r-hour").textContent = hhmm(cursorHour);
+        $("r-chiva").textContent = RAIN_CHIVA[cursorHour] ? RAIN_CHIVA[cursorHour] + " mm" : "—";
+        $("r-turis").textContent = RAIN_TURIS[cursorHour] ? RAIN_TURIS[cursorHour] + " mm" : "—";
+        $("r-poyo").textContent =
+          q != null ? fmt.format(q) + " m³/s" : cursorHour >= GAUGE_LOST ? "no reading" : "—";
+      }
+
+      function setCursor(h) {
+        cursorHour = Math.min(HN, Math.max(H0, Math.round(h)));
+        paintCursor();
+      }
+
+      svg.addEventListener("pointermove", (e) => {
+        const box = svg.getBoundingClientRect();
+        const scale = (plotW + PAD.l + PAD.r) / box.width;
+        setCursor(H0 + (((e.clientX - box.left) * scale - PAD.l) / plotW) * (HN - H0));
+      });
+
+      svg.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft") setCursor(cursorHour - 1);
+        else if (e.key === "ArrowRight") setCursor(cursorHour + 1);
+        else return;
+        e.preventDefault();
+      });
+
+      /* Chain, exposure, judge -------------------------------------------------- */
+
+      $("chain").innerHTML = CHAIN.map(
+        (h) =>
+          '<li><span class="chain-id">' +
+          esc(h.id) +
+          '</span><div><span class="chain-link">' +
+          esc(h.link) +
+          '</span><div class="chain-statement">' +
+          esc(h.statement) +
+          '</div><div class="checks">' +
+          h.checks.map((c) => '<span class="check">' + esc(c) + "</span>").join("") +
+          '</div></div><span class="verdict-word">' +
+          esc(h.status) +
+          "</span></li>"
+      ).join("");
+
+      const SUM = SEGMENTS.reduce((a, s) => a + s.sum, 0);
+      $("exposure").innerHTML =
+        "<thead><tr><th>Segment</th><th>Policies</th>" +
+        "<th>Sum insured, EUR</th></tr></thead><tbody>" +
+        SEGMENTS.map(
+          (s) =>
+            "<tr><td>" +
+            esc(s.name) +
+            "</td><td>" +
+            s.policies +
+            "</td><td>" +
+            fmt.format(s.sum) +
+            '<i class="bar" style="width:' +
+            ((s.sum / SUM) * 100).toFixed(1) +
+            '%"></i></td></tr>'
+        ).join("") +
+        "</tbody><tfoot><tr><td>Inside the footprint</td><td>" +
+        TOTALS.policies +
+        "</td><td>" +
+        fmt.format(SUM) +
+        "</td></tr></tfoot>";
+
+      $("judge").innerHTML =
+        "<tbody><tr><td>Overall</td><td>" +
+        JUDGE.overall +
+        "</td></tr><tr><td>Claims scored</td><td>" +
+        JUDGE.claims +
+        "</td></tr>" +
+        JUDGE.rows.map((r) => "<tr><td>" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td></tr>").join("") +
+        "</tbody>";
+
+      /* Playbook ------------------------------------------------------------------ */
+
+      function drawPlaybook(state) {
+        $("playbook").innerHTML = PLAYBOOK.map((a, i) => {
+          const s = state(a);
+          return (
+            '<li><div class="action-top"><span>' +
+            esc(a.id) +
+            "</span><span>within " +
+            a.horizon +
+            " h</span><span>" +
+            (a.outbound ? "leaves the building" : "internal") +
+            '</span><span class="state" data-state="' +
+            s +
+            '">' +
+            s +
+            '</span></div><p class="action-head">' +
+            esc(a.head) +
+            '</p><p class="action-full" id="full-' +
+            i +
+            '" hidden>' +
+            esc(a.full) +
+            '</p><div class="action-foot"><button class="link" data-full="' +
+            i +
+            '">Detail</button><span>' +
+            a.claims.join(", ") +
+            "</span></div></li>"
+          );
+        }).join("");
+      }
+
+      drawPlaybook(() => "held");
+
+      $("playbook").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-full]");
+        if (!btn) return;
+        const p = $("full-" + btn.dataset.full);
+        p.hidden = !p.hidden;
+        btn.textContent = p.hidden ? "Detail" : "Hide";
+      });
+
+      /* Decision -------------------------------------------------------------------- */
+
+      const unsettled = Object.values(VIEWS).filter((v) => !v.settled).length;
+      $("caution").innerHTML =
+        unsettled +
+        " source carries an unconfirmed licence and feeds the rain and discharge claims. " +
+        "Clear it before anything leaves the building.";
+
+      function decide(verdict, note) {
+        const released = verdict === "approved";
+        drawPlaybook((a) => (released ? "released" : a.outbound ? "withheld" : "held"));
+        $("m-status").textContent =
+          released ? "Approved" : verdict === "edited" ? "Edit requested" : "Rejected";
+        $("s-actions").textContent = released ? "0" : PLAYBOOK.length;
+        const when = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+        const head =
+          verdict === "approved"
+            ? "Approved by zain at " + when + ". Four actions released."
+            : verdict === "edited"
+              ? "Edit requested by zain at " + when + ". Nothing has left the building."
+              : "Held by zain at " + when + ". The two outbound actions are withheld.";
+        const r = $("receipt");
+        r.innerHTML = "<b>" + head + "</b>" + (note ? "<span>" + esc(note) + "</span>" : "");
+        r.hidden = false;
+        r.classList.remove("flash");
+        void r.offsetWidth;
+        r.classList.add("flash");
+        ["approve", "edit", "reject"].forEach((id) => ($(id).disabled = true));
+        $("editForm").hidden = true;
+      }
+
+      $("approve").addEventListener("click", () => decide("approved"));
+      $("reject").addEventListener("click", () =>
+        decide("rejected", "Reason: the AEMET and SAIH Júcar licences are unconfirmed.")
+      );
+      $("edit").addEventListener("click", () => {
+        $("editForm").hidden = false;
+        $("editText").focus();
+      });
+      $("editCancel").addEventListener("click", () => {
+        $("editForm").hidden = true;
+        $("editText").value = "";
+      });
+      $("editForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        decide("edited", $("editText").value.trim() || "No wording given.");
+      });
+
+      /* Boot ------------------------------------------------------------------------- */
+
+      drawChart();
+      let resizeTimer;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(drawChart, 120);
+      });
+    </script>
+  </body>
+</html>

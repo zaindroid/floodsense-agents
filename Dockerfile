@@ -13,7 +13,7 @@ COPY agents/floodsense_agents ./floodsense_agents
 COPY ui/mock ./ui/mock
 
 # Rewritten on every sync by .github/workflows/sync-from-monorepo.yml.
-ENV GIT_SHA=811d8dad264bb85993c3ee37a590a532dad40389 BUILT_AT=2026-10-24T11:27:52Z
+ENV GIT_SHA=c2ab225b48162ead8822f2b1b1f854f582711737 BUILT_AT=2026-10-24T11:49:39Z
 
 # 8080 is the only port Coolify's healthcheck targets. Runs on the stand-ins:
 # no Zetaris or Meterless credentials, so no secrets reach this image.
