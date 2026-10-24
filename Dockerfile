@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY agents/floodsense_agents ./floodsense_agents
 # The service serves ui/mock at /mock and looks for it beside the package.
 COPY ui/mock ./ui/mock
+COPY ui/app ./ui/app
 
 # Rewritten on every sync by .github/workflows/sync-from-monorepo.yml.
 ENV GIT_SHA=09d3c83819c84cd62ffd8710b005a3f96bb4fd5b BUILT_AT=2026-10-24T12:33:46Z

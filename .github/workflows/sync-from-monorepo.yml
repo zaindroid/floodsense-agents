@@ -39,6 +39,7 @@ jobs:
           cp -r source/agents agents
           mkdir -p ui
           cp -r source/ui/mock ui/mock
+          cp -r source/ui/app ui/app
           find agents -name __pycache__ -type d -prune -exec rm -rf {} +
           sha=$(git -C source rev-parse HEAD)
           rm -rf source
