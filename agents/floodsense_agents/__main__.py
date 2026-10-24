@@ -122,16 +122,25 @@ def _resolve(root, name: str):
     return path
 
 
-def _static(root, name: str, versioned: bool = False) -> FileResponse:
+def _build() -> str:
+    return (settings.git_sha or "dev")[:12]
+
+
+def _static(root, name: str, version: str | None = None) -> FileResponse:
     path = _resolve(root, name)
     if path.suffix in ("", ".html"):
         return _page(root, name)
+    if version and version != _build():
+        # Another build's URL. During a rollout both containers answer, and
+        # serving this one's file would let a CDN pin the wrong bytes under
+        # the new name, immutably. A miss is cheap; a poisoned cache is not.
+        raise HTTPException(404, f"asset {name} is not from build {version}")
     return FileResponse(
         path,
         media_type=_TYPES.get(path.suffix, "text/html"),
         headers={
             "cache-control": "public, max-age=31536000, immutable"
-            if versioned
+            if version
             else "no-cache, must-revalidate"
         },
     )
@@ -140,7 +149,7 @@ def _static(root, name: str, versioned: bool = False) -> FileResponse:
 def _page(root, name: str) -> HTMLResponse:
     """An HTML page, with its own assets pinned to this build."""
     path = _resolve(root, name)
-    sha = (settings.git_sha or "dev")[:12]
+    sha = _build()
     pinned = r'\1="\2?v=' + sha + '"'
     html = _ASSET_REF.sub(pinned, path.read_text(encoding="utf-8"))
     return HTMLResponse(html, headers={"cache-control": "no-store, must-revalidate"})
@@ -172,7 +181,7 @@ def app_index():
 
 @app.get("/app/{name}", include_in_schema=False)
 def app_asset(name: str, v: str | None = None):
-    return _static(APP_DIR, name, versioned=bool(v))
+    return _static(APP_DIR, name, version=v)
 
 
 @app.get("/desk/events", include_in_schema=False)
@@ -273,7 +282,7 @@ def mock_analyst():
 
 @app.get("/mock/{name}", include_in_schema=False)
 def mock_asset(name: str, v: str | None = None):
-    return _static(MOCK_DIR, name, versioned=bool(v))
+    return _static(MOCK_DIR, name, version=v)
 
 
 def _dep_name(rt: Runtime, attr: str) -> str:

@@ -190,9 +190,18 @@ class DeskTest(unittest.TestCase):
 
         bare = self.c.get("/app/app.js")
         self.assertIn("no-cache", bare.headers["cache-control"])
-        pinned = self.c.get("/app/app.js?v=abc123")
+
+        build = service._build()
+        pinned = self.c.get(f"/app/app.js?v={build}")
+        self.assertEqual(pinned.status_code, 200)
         self.assertIn("immutable", pinned.headers["cache-control"])
         self.assertEqual(bare.text, pinned.text)
+
+        # During a rollout both containers answer. One serving another build's
+        # URL lets a CDN pin the wrong bytes under that name, for a year.
+        other = self.c.get("/app/app.js?v=000000000000")
+        self.assertEqual(other.status_code, 404)
+        self.assertEqual(self.c.get("/mock/data.js?v=000000000000").status_code, 404)
 
         for url in ("/mock/", "/console"):
             r = self.c.get(url)
