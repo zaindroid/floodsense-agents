@@ -4,6 +4,14 @@ Routes follow the contract in docs/GAMEPLAN.md §5.5. Every response carries
 served_from (live | cache | replay) and cached_at.
 
 GET  /                             review console, one page, served from console.html
+GET  /app/                         the duty desk: events, one case, the decision record
+GET  /desk/events                  every known event and the case standing on it
+GET  /desk/events/{id}             one case; starts it if nobody has
+GET  /runs/{id}/outbound           approved messages per exposed site (never sent from here)
+GET  /runs/{id}/exposure.csv       exposed policies for the claims system
+GET  /runs/{id}/record             the decision record: answer, sources, scores, signature
+POST /runs/{id}/dispatch           post the decision to DECISION_WEBHOOK, off unless set
+GET  /console                      the earlier single-page console
 GET  /mock/                        design mock, plain view for a non-specialist (ui/mock)
 GET  /mock/analyst                 design mock, analyst view: chain, judge, playbook, decision
 GET  /health                       liveness: service, graph, version. Touches nothing.
@@ -31,9 +39,15 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 
 from floodsense_agents import __version__
+from floodsense_agents import desk
 from floodsense_agents.models import ApprovalDecision, RunRequest
 from floodsense_agents.readiness import report as readiness_report
 from floodsense_agents.runtime import NotAwaitingApproval, RunNotFound, Runtime
@@ -42,12 +56,22 @@ from floodsense_agents.settings import settings
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 app = FastAPI(title="FloodSense EU — agents", version=__version__)
 CONSOLE = Path(__file__).resolve().parent / "console.html"
-# ui/mock sits beside the package in the image and two levels up in the repo.
+# ui/ sits beside the package in the image and two levels up in the repo.
 _HERE = Path(__file__).resolve().parent
-MOCK_DIR = next(
-    (p for p in (_HERE.parent / "ui" / "mock", _HERE.parent.parent / "ui" / "mock") if p.is_dir()),
-    None,
-)
+
+
+def _ui(folder: str):
+    for p in (_HERE.parent / "ui" / folder, _HERE.parent.parent / "ui" / folder):
+        if p.is_dir():
+            return p
+    return None
+
+
+APP_DIR = _ui("app")
+MOCK_DIR = _ui("mock")
+# The desk asks the graph the same thing every time; the operator picks the
+# event, not the wording.
+_DESK_QUESTION = "Which of our sites are at risk, and why?"
 _rt: Runtime | None = None
 
 
@@ -69,19 +93,106 @@ def _live(body: dict) -> dict:
     return body
 
 
-def _mock_page(name: str) -> FileResponse:
-    if MOCK_DIR is None:
-        raise HTTPException(404, "ui/mock was not copied into this build")
-    path = (MOCK_DIR / name).resolve()
+_TYPES = {".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
+
+
+def _static(root, name: str) -> FileResponse:
+    if root is None:
+        raise HTTPException(404, "this page was not copied into the build")
+    path = (root / name).resolve()
     # Direct children only. {name} never contains a slash, but ".." would.
-    if path.parent != MOCK_DIR.resolve() or not path.is_file():
-        raise HTTPException(404, f"no mock file named {name}")
-    return FileResponse(path, media_type="text/javascript" if path.suffix == ".js" else "text/html")
+    if path.parent != root.resolve() or not path.is_file():
+        raise HTTPException(404, f"no file named {name}")
+    return FileResponse(path, media_type=_TYPES.get(path.suffix, "text/html"))
+
+
+def _mock_page(name: str) -> FileResponse:
+    return _static(MOCK_DIR, name)
 
 
 @app.get("/", include_in_schema=False)
+def home():
+    return RedirectResponse("/app/", status_code=308)
+
+
+@app.get("/console", include_in_schema=False)
 def console():
     return FileResponse(CONSOLE, media_type="text/html")
+
+
+@app.get("/app", include_in_schema=False)
+def app_bare():
+    return RedirectResponse("/app/", status_code=308)
+
+
+@app.get("/app/", include_in_schema=False)
+def app_index():
+    return _static(APP_DIR, "index.html")
+
+
+@app.get("/app/{name}", include_in_schema=False)
+def app_asset(name: str):
+    return _static(APP_DIR, name)
+
+
+@app.get("/desk/events", include_in_schema=False)
+def desk_events():
+    """What the desk opens on: every known event, and the case on it."""
+    return _live({"events": desk.events(runtime().past())})
+
+
+@app.get("/desk/events/{event_id}", include_in_schema=False)
+def desk_event(event_id: str):
+    """The case for one event. Starts it if nobody has yet."""
+    rt = runtime()
+    row = next((r for r in rt.past() if r.get("event_id") == event_id), None)
+    if row is not None:
+        run = rt.snapshot(row["run_id"])
+    else:
+        try:
+            run = rt.start(RunRequest(question=_DESK_QUESTION, event_id=event_id))
+        except KeyError as e:
+            raise HTTPException(400, str(e).strip('"')) from e
+    return _live({"run": run, "figures": desk.summarise(run), "released": desk.is_released(run)})
+
+
+@app.get("/desk/dispatch-target", include_in_schema=False)
+def desk_dispatch_target():
+    target = desk.webhook_target()
+    return _live({"configured": bool(target), "target": target})
+
+
+def _released_run(run_id: str) -> dict:
+    run = runtime().snapshot(run_id)
+    if not desk.is_released(run):
+        raise HTTPException(409, "nothing is released until a reviewer approves or edits")
+    return run
+
+
+@app.get("/runs/{run_id}/outbound", include_in_schema=False)
+def run_outbound(run_id: str):
+    """The messages, rendered. This endpoint does not send them."""
+    return _live({"messages": desk.outbound(_released_run(run_id))})
+
+
+@app.get("/runs/{run_id}/exposure.csv", include_in_schema=False)
+def run_exposure_csv(run_id: str):
+    return PlainTextResponse(
+        desk.exposure_csv(_released_run(run_id)),
+        media_type="text/csv",
+        headers={"content-disposition": f'attachment; filename="exposure-{run_id}.csv"'},
+    )
+
+
+@app.get("/runs/{run_id}/record", include_in_schema=False)
+def run_record(run_id: str):
+    return _live(desk.record(runtime().snapshot(run_id)))
+
+
+@app.post("/runs/{run_id}/dispatch", include_in_schema=False)
+def run_dispatch(run_id: str):
+    """Post the decision to the nominated endpoint. Off unless one is set."""
+    return _live(desk.dispatch(_released_run(run_id)))
 
 
 @app.get("/readiness", include_in_schema=False)
