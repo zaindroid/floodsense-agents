@@ -2,7 +2,7 @@
 # Hackathon-Monorepo by .github/workflows/sync-from-monorepo.yml.
 name: floodsense-agents
 port: 8080
-memory_mb: 512
+memory_mb: 384
 
 domains:
   - floodsense-agents.zaindroid.me
