@@ -152,6 +152,8 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? "" : s).replace(
   /[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pct = (x) => (x == null ? "n/a" : (x * 100).toFixed(0) + "%");
+// evidence arrives keyed by query id, anomalies as a list.
+const count = (x) => (Array.isArray(x) ? x.length : x ? Object.keys(x).length : 0);
 const eur = (x) => (x == null ? "n/a" : "€" + Math.round(x).toLocaleString("en-GB"));
 
 let run = null;
@@ -238,9 +240,9 @@ function render() {
   $("#exposure").innerHTML = [
     stat("policies", x.policies == null ? 0 : x.policies),
     stat("sum insured", eur(x.sum_insured_eur)),
-    stat("sites", (x.assets || []).length),
-    stat("anomalies", (run.anomalies || []).length),
-    stat("evidence queries", (run.evidence || []).length),
+    stat("sites", count(x.assets)),
+    stat("anomalies", count(run.anomalies)),
+    stat("evidence queries", count(run.evidence)),
     stat("revise rounds", run.revise_rounds == null ? 0 : run.revise_rounds),
   ].join("");
 
@@ -267,8 +269,9 @@ function render() {
     '</span><div id="claim-' + esc(c.claim_id) + '">' + esc(c.text) +
     '</div><div class="chips" style="margin-top:6px">' +
     (c.citations || []).map((ct) =>
-      '<span class="chip" title="' + esc([ct.publisher, ct.licence, ct.quote]
-        .filter(Boolean).join(" / ")) + '">' + esc(ct.layer) + "</span>").join("") +
+      '<span class="chip" title="' + esc([ct.title, ct.publisher, ct.licence, ct.quote]
+        .filter(Boolean).join(" / ")) + '"><b>' + esc(ct.layer) + "</b> " +
+      esc(ct.title || ct.source_url || "cited") + "</span>").join("") +
     "</div></div>"
   ).join("");
 }
