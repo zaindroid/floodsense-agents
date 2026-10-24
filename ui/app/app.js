@@ -422,7 +422,7 @@ async function drawTimeline(eventId) {
           m.links +
           " links, " +
           m.anomalies +
-          " anomalies</em>" +
+          (m.anomalies === 1 ? " anomaly</em>" : " anomalies</em>") +
           money +
           "</button>"
         );

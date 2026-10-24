@@ -181,6 +181,11 @@ def vocabulary(event_id: str) -> set[str]:
     return {w for w in words if w not in _GENERIC and len(w) > 2}
 
 
+def _sentence(text: str) -> str:
+    """The reason is shown to a person as the whole answer, so it opens like one."""
+    return text[:1].upper() + text[1:] if text else text
+
+
 def check(question: str, event_id: str) -> dict:
     """Decide whether this run can honestly take the question on."""
     asked = _tokens(question)
@@ -203,7 +208,7 @@ def check(question: str, event_id: str) -> dict:
                 "in_scope": False,
                 "elsewhere": other,
                 "asked": sorted(asked),
-                "reason": (
+                "reason": _sentence(
                     f"{', '.join(sorted(hit))} belongs to {other} ({spec(other).name}), "
                     f"not to {event_id}. Open that case instead."
                 ),
@@ -213,7 +218,7 @@ def check(question: str, event_id: str) -> dict:
         "in_scope": False,
         "elsewhere": None,
         "asked": sorted(asked),
-        "reason": (
+        "reason": _sentence(
             f"nothing in this run covers {', '.join(sorted(asked))}. The agents read four "
             f"views only: {', '.join(CONTRACT_VIEWS)}, which hold "
             f"{', '.join(spec(e).region for e in EVENTS)}."

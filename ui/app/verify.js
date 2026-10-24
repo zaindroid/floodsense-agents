@@ -76,7 +76,7 @@
 .vfy-agent.failed{border-left-color:var(--stop,#8c3b3b)}
 .vfy-agent\\.not{border-left-color:#b6b6b0}
 .vfy-agent.notreached{border-left-color:#b6b6b0}
-.vfy-ix{font-size:11px;color:var(--rule,#dcdcd6)}
+.vfy-ix{font-size:11px;color:#a4a49e}
 .vfy-agent[aria-current=true] .vfy-ix{color:var(--soft,#5c636c)}
 .vfy-nm{flex:1;font-size:14px}
 .vfy-ct{font-size:11.5px;color:var(--soft,#5c636c)}

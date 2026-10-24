@@ -439,7 +439,7 @@ main {
 .node-n {
   display: block;
   font-size: 11px;
-  color: var(--rule);
+  color: #a4a49e;
   margin-top: 11px;
 }
 

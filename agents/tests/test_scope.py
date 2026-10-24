@@ -69,9 +69,18 @@ class ScopeRuleTest(unittest.TestCase):
         verdict = scope.check("What is the risk on the Rhine at Koeln?", "EMSR773")
         self.assertFalse(verdict["in_scope"])
         self.assertIsNone(verdict["elsewhere"])
-        self.assertIn("rhine", verdict["reason"])
+        self.assertIn("rhine", verdict["reason"].lower())
         self.assertIn("hazard_timeline", verdict["reason"])
         self.assertIn("Valencia", verdict["reason"])
+
+    def test_a_refusal_is_written_as_a_sentence(self) -> None:
+        # It is the whole answer a person sees, not a log line.
+        for q, ev in (
+            ("What is the risk on the Rhine at Koeln?", "EMSR773"),
+            ("How bad was the Ahr valley?", "EMSR773"),
+        ):
+            reason = scope.check(q, ev)["reason"]
+            self.assertTrue(reason[:1].isupper(), reason)
 
     def test_a_month_or_a_data_provider_is_not_a_place(self) -> None:
         # The gate refused these four on its first run. Refusing a fair
@@ -111,7 +120,7 @@ class ScopeRunTest(unittest.TestCase):
         self.assertEqual(run["playbook"], [])
         self.assertEqual(run["hypotheses"], [])
         self.assertFalse(run["exposure"])
-        self.assertIn("rhine", run["summary"])
+        self.assertIn("rhine", run["summary"].lower())
 
     def test_a_refusal_reads_nothing_and_calls_no_model(self) -> None:
         z = Counting()
