@@ -32,18 +32,20 @@ jobs:
           git clone --quiet --depth 1 --branch "$SOURCE_REF" \
             "https://x-access-token:$TOKEN@github.com/$SOURCE_REPO.git" source
 
-      - name: Mirror the agents service
+      - name: Mirror the agents service and the ui mock
         id: mirror
         run: |
-          rm -rf agents
+          rm -rf agents ui
           cp -r source/agents agents
+          mkdir -p ui
+          cp -r source/ui/mock ui/mock
           find agents -name __pycache__ -type d -prune -exec rm -rf {} +
           sha=$(git -C source rev-parse HEAD)
           rm -rf source
 
           git add -A
           if git diff --cached --quiet; then
-            echo "agents/ already matches $SOURCE_REF at ${sha:0:12}"
+            echo "the mirror already matches $SOURCE_REF at ${sha:0:12}"
             exit 0
           fi
 

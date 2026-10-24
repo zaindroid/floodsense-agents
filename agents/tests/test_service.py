@@ -49,6 +49,12 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("text/html", r.headers["content-type"])
         self.assertIn("FloodSense EU", r.text)
 
+    def test_mock_is_served(self) -> None:
+        r = self.c.get("/mock")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/html", r.headers["content-type"])
+        self.assertIn("event review", r.text)
+
     def test_ready_and_version(self) -> None:
         ready = self.c.get("/ready").json()
         self.assertEqual(ready["status"], "ready")

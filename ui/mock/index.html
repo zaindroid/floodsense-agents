@@ -1,0 +1,1417 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FloodSense EU — event review</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #fafaf8;
+        --ink: #1b1f24;
+        --ink-soft: #5c636c;
+        --rule: #dcdcd6;
+        --river: #35607a;
+        --river-pale: #8aabbd;
+        --gauge: #9a6b1f;
+        --released: #40674f;
+        --wash: #f2f2ee;
+        --step-4: 4px;
+        --step-8: 8px;
+        --step-12: 12px;
+        --step-16: 16px;
+        --step-24: 24px;
+        --step-32: 32px;
+        --step-48: 48px;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--river);
+        outline-offset: 2px;
+      }
+
+      h1,
+      h2,
+      p,
+      dl,
+      dd,
+      dt,
+      ol,
+      ul,
+      figure {
+        margin: 0;
+      }
+
+      ol,
+      ul {
+        padding: 0;
+        list-style: none;
+      }
+
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 0 var(--step-24);
+      }
+
+      /* Masthead ---------------------------------------------------------- */
+
+      .masthead {
+        border-bottom: 1px solid var(--ink);
+        padding: var(--step-16) 0 var(--step-12);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--step-24);
+      }
+
+      .wordmark {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        margin-right: auto;
+      }
+
+      .wordmark span {
+        font-weight: 400;
+        color: var(--ink-soft);
+      }
+
+      .mast-meta {
+        display: flex;
+        gap: var(--step-24);
+        flex-wrap: wrap;
+      }
+
+      .mast-meta div {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+
+      .mast-meta dt {
+        font-size: 11.5px;
+        color: var(--ink-soft);
+        line-height: 1.3;
+      }
+
+      .mast-meta dd {
+        font-size: 13.5px;
+        line-height: 1.3;
+      }
+
+      /* Question and answer ----------------------------------------------- */
+
+      .band {
+        padding: var(--step-32) 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .question {
+        font-size: 31px;
+        font-weight: 500;
+        line-height: 1.18;
+        letter-spacing: -0.015em;
+        max-width: 30ch;
+        text-wrap: balance;
+      }
+
+      .answer {
+        margin-top: var(--step-16);
+        font-size: 18.5px;
+        line-height: 1.62;
+        max-width: 60ch;
+      }
+
+      .cite {
+        font: inherit;
+        font-size: 0.78em;
+        font-weight: 500;
+        vertical-align: 0.25em;
+        color: var(--river);
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--river-pale);
+        padding: 0 1px;
+        margin: 0 1px;
+        cursor: pointer;
+      }
+
+      .cite:hover,
+      .cite[aria-expanded="true"] {
+        background: var(--wash);
+        border-bottom-color: var(--river);
+      }
+
+      .evidence {
+        margin-top: var(--step-24);
+        border-top: 1px solid var(--ink);
+        padding-top: var(--step-12);
+        max-width: 72ch;
+      }
+
+      .evidence-head {
+        display: flex;
+        align-items: baseline;
+        gap: var(--step-12);
+      }
+
+      .evidence-id {
+        font-weight: 600;
+        font-size: 13.5px;
+      }
+
+      .evidence-claim {
+        margin-top: var(--step-4);
+        font-size: 15.5px;
+        line-height: 1.55;
+      }
+
+      .evidence-grid {
+        margin-top: var(--step-12);
+        display: grid;
+        grid-template-columns: 7.5rem 1fr;
+        gap: var(--step-4) var(--step-16);
+        font-size: 13.5px;
+      }
+
+      .evidence-grid dt {
+        color: var(--ink-soft);
+      }
+
+      .evidence-sql {
+        margin-top: var(--step-12);
+        padding: var(--step-8) var(--step-12);
+        background: var(--wash);
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-soft);
+        overflow-x: auto;
+        white-space: pre-wrap;
+      }
+
+      .dismiss {
+        margin-left: auto;
+        font: inherit;
+        font-size: 13px;
+        color: var(--ink-soft);
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--rule);
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .dismiss:hover {
+        color: var(--ink);
+        border-bottom-color: var(--ink);
+      }
+
+      /* Hydrograph --------------------------------------------------------- */
+
+      .chart-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--step-24);
+        margin-bottom: var(--step-16);
+      }
+
+      .chart-title {
+        font-size: 13px;
+        font-weight: 600;
+        margin-right: auto;
+      }
+
+      .chart-title em {
+        display: block;
+        font-style: normal;
+        font-weight: 400;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        margin-top: 2px;
+      }
+
+      .readout {
+        display: flex;
+        gap: var(--step-24);
+      }
+
+      .readout div {
+        min-width: 5.5rem;
+      }
+
+      .readout dt {
+        font-size: 11.5px;
+        color: var(--ink-soft);
+        line-height: 1.3;
+      }
+
+      .readout dd {
+        font-size: 15px;
+        line-height: 1.35;
+      }
+
+      .chart-frame {
+        position: relative;
+      }
+
+      #chart {
+        display: block;
+        width: 100%;
+        touch-action: none;
+      }
+
+      .legend {
+        display: flex;
+        gap: var(--step-16);
+        margin-top: var(--step-12);
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        flex-wrap: wrap;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .key {
+        width: 10px;
+        height: 10px;
+        flex: none;
+      }
+
+      .key-line {
+        width: 14px;
+        height: 2px;
+        background: var(--ink);
+      }
+
+      /* Columns ------------------------------------------------------------ */
+
+      .columns {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+        gap: 0 var(--step-48);
+      }
+
+      .columns > * {
+        min-width: 0;
+      }
+
+      .col-right {
+        border-left: 1px solid var(--rule);
+        padding-left: var(--step-48);
+      }
+
+      .group {
+        padding: var(--step-32) 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .group:last-child {
+        border-bottom: 0;
+      }
+
+      .group > h2 {
+        font-size: 13px;
+        font-weight: 600;
+        padding-bottom: var(--step-8);
+        border-bottom: 1px solid var(--ink);
+      }
+
+      /* Causal chain ------------------------------------------------------- */
+
+      .chain li {
+        display: grid;
+        grid-template-columns: 2.25rem 1fr auto;
+        gap: var(--step-12);
+        align-items: baseline;
+        padding: var(--step-16) 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .chain li:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .chain-id {
+        font-weight: 600;
+        font-size: 13.5px;
+        color: var(--ink-soft);
+      }
+
+      .chain-link {
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .chain-statement {
+        font-size: 15.5px;
+        line-height: 1.45;
+        margin-top: 1px;
+      }
+
+      .chain-why {
+        font-size: 13px;
+        color: var(--ink-soft);
+        line-height: 1.5;
+        margin-top: var(--step-8);
+      }
+
+      .verdict {
+        font-size: 12.5px;
+        white-space: nowrap;
+        color: var(--released);
+      }
+
+      .verdict b {
+        font-weight: 500;
+      }
+
+      .rounds {
+        display: block;
+        color: var(--ink-soft);
+        text-align: right;
+        margin-top: 2px;
+      }
+
+      /* Ledgers ------------------------------------------------------------ */
+
+      .ledger {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14.5px;
+      }
+
+      .ledger th {
+        font-weight: 400;
+        font-size: 11.5px;
+        color: var(--ink-soft);
+        text-align: right;
+        padding: var(--step-8) 0 var(--step-4);
+      }
+
+      .ledger th:first-child {
+        text-align: left;
+      }
+
+      .ledger td {
+        padding: 7px 0;
+        border-top: 1px solid var(--rule);
+        text-align: right;
+      }
+
+      .ledger td:first-child {
+        text-align: left;
+      }
+
+      .ledger tbody tr:hover {
+        background: var(--wash);
+      }
+
+      .ledger tfoot td {
+        border-top: 1px solid var(--ink);
+        font-weight: 600;
+        padding-top: var(--step-8);
+      }
+
+      .bar {
+        display: block;
+        height: 3px;
+        background: var(--river-pale);
+        margin: 5px 0 0 auto;
+      }
+
+      /* Playbook ----------------------------------------------------------- */
+
+      .actions li {
+        padding: var(--step-16) 0;
+        border-bottom: 1px solid var(--rule);
+      }
+
+      .actions li:last-child {
+        border-bottom: 0;
+      }
+
+      .action-top {
+        display: flex;
+        align-items: baseline;
+        gap: var(--step-8);
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .state {
+        margin-left: auto;
+        font-size: 12px;
+        padding: 1px 7px;
+        border: 1px solid var(--gauge);
+        color: var(--gauge);
+        transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+      }
+
+      .state[data-state="released"] {
+        border-color: var(--released);
+        color: #fff;
+        background: var(--released);
+      }
+
+      .state[data-state="withheld"] {
+        border-color: var(--rule);
+        color: var(--ink-soft);
+      }
+
+      .action-text {
+        margin-top: var(--step-8);
+        font-size: 14.5px;
+        line-height: 1.5;
+      }
+
+      .action-claims {
+        margin-top: 6px;
+        font-size: 12.5px;
+        color: var(--ink-soft);
+      }
+
+      /* Decision ----------------------------------------------------------- */
+
+      .caution {
+        margin-top: var(--step-16);
+        border-left: 2px solid var(--gauge);
+        padding: 2px 0 2px var(--step-12);
+        font-size: 13.5px;
+        line-height: 1.5;
+      }
+
+      .caution b {
+        font-weight: 500;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--step-8);
+        margin-top: var(--step-24);
+      }
+
+      button.act {
+        font: inherit;
+        font-size: 14px;
+        padding: 9px 15px;
+        border-radius: 3px;
+        border: 1px solid var(--ink);
+        background: var(--ink);
+        color: var(--paper);
+        cursor: pointer;
+      }
+
+      button.act.quiet {
+        background: none;
+        color: var(--ink);
+        border-color: var(--rule);
+      }
+
+      button.act:hover {
+        background: #000;
+      }
+
+      button.act.quiet:hover {
+        background: var(--wash);
+        border-color: var(--ink);
+      }
+
+      button.act[disabled] {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      .edit {
+        margin-top: var(--step-16);
+      }
+
+      .edit label {
+        display: block;
+        font-size: 13px;
+        color: var(--ink-soft);
+        margin-bottom: 6px;
+      }
+
+      .edit textarea {
+        font: inherit;
+        font-size: 14.5px;
+        width: 100%;
+        min-height: 5.5rem;
+        padding: var(--step-8);
+        border: 1px solid var(--rule);
+        background: #fff;
+        color: var(--ink);
+        resize: vertical;
+      }
+
+      .edit textarea:focus {
+        border-color: var(--river);
+      }
+
+      .edit-controls {
+        display: flex;
+        gap: var(--step-8);
+        margin-top: var(--step-8);
+      }
+
+      .receipt {
+        margin-top: var(--step-16);
+        border-top: 1px solid var(--ink);
+        padding-top: var(--step-12);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .receipt b {
+        font-weight: 600;
+      }
+
+      .receipt span {
+        display: block;
+        color: var(--ink-soft);
+        font-size: 13px;
+        margin-top: 2px;
+      }
+
+      /* Footer ------------------------------------------------------------- */
+
+      .footer {
+        padding: var(--step-24) 0 var(--step-48);
+        font-size: 12.5px;
+        color: var(--ink-soft);
+        line-height: 1.6;
+        max-width: 70ch;
+      }
+
+      .flash {
+        animation: flash 900ms ease-out;
+      }
+
+      @keyframes flash {
+        from {
+          background: #efe4cd;
+        }
+        to {
+          background: transparent;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 1ms !important;
+          transition-duration: 1ms !important;
+        }
+      }
+
+      @media (max-width: 860px) {
+        .columns {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+
+        .col-right {
+          border-left: 0;
+          padding-left: 0;
+          border-top: 1px solid var(--rule);
+        }
+
+        .question {
+          font-size: 25px;
+          max-width: none;
+        }
+
+        .answer {
+          font-size: 17px;
+        }
+
+        .readout {
+          gap: var(--step-16);
+        }
+      }
+
+      @media (max-width: 560px) {
+        .shell {
+          padding: 0 var(--step-16);
+        }
+
+        .masthead {
+          gap: var(--step-12);
+        }
+
+        .chain li {
+          grid-template-columns: 2rem 1fr;
+        }
+
+        .verdict {
+          grid-column: 2;
+          text-align: left;
+        }
+
+        .rounds {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="masthead shell">
+      <div class="wordmark">FloodSense EU <span>— event review</span></div>
+      <dl class="mast-meta">
+        <div><dt>Event</dt><dd id="m-event">EMSR773 Valencia</dd></div>
+        <div><dt>Replay</dt><dd id="m-replay">29 Oct 2024, 18:00 UTC</dd></div>
+        <div><dt>Portfolio</dt><dd id="m-portfolio">demo-insurer</dd></div>
+        <div><dt>Status</dt><dd id="m-status">Awaiting approval</dd></div>
+      </dl>
+    </header>
+
+    <main class="shell">
+      <section class="band">
+        <h1 class="question" id="q"></h1>
+        <p class="answer" id="answer"></p>
+        <div class="evidence" id="evidence" hidden></div>
+      </section>
+
+      <section class="band">
+        <div class="chart-head">
+          <div class="chart-title">
+            Rain and river discharge, 29 October 2024
+            <em>Chiva and Turís rain gauges; Poyo ravine at Riba-roja</em>
+          </div>
+          <dl class="readout" id="readout">
+            <div><dt>Hour, UTC</dt><dd id="r-hour">—</dd></div>
+            <div><dt>Chiva</dt><dd id="r-chiva">—</dd></div>
+            <div><dt>Turís</dt><dd id="r-turis">—</dd></div>
+            <div><dt>Poyo</dt><dd id="r-poyo">—</dd></div>
+          </dl>
+        </div>
+        <div class="chart-frame"><svg id="chart" tabindex="0" role="img"></svg></div>
+        <div class="legend">
+          <span><i class="key" style="background: var(--river-pale)"></i>Rain at Chiva, mm/h</span>
+          <span><i class="key" style="background: var(--river)"></i>Rain at Turís, mm/h</span>
+          <span><i class="key key-line"></i>Discharge at Poyo, m³/s</span>
+          <span>Use the chart with a pointer or the arrow keys.</span>
+        </div>
+      </section>
+
+      <div class="columns">
+        <section class="col-left">
+          <div class="group">
+            <h2>How the chain was checked</h2>
+            <ol class="chain" id="chain"></ol>
+          </div>
+          <div class="group">
+            <h2>Judge</h2>
+            <table class="ledger" id="judge"></table>
+          </div>
+          <div class="group">
+            <h2>Exposure inside the mapped footprint</h2>
+            <table class="ledger" id="exposure"></table>
+          </div>
+        </section>
+
+        <aside class="col-right">
+          <div class="group">
+            <h2>Playbook</h2>
+            <ol class="actions" id="playbook"></ol>
+          </div>
+
+          <div class="group">
+            <h2>Decision</h2>
+            <p class="caution">
+              Two sources carry an <b>unconfirmed licence</b>: AEMET OpenData terms and SAIH Júcar.
+              Both feed the rain and discharge claims. Clear them before anything leaves the
+              building.
+            </p>
+            <div class="controls" id="controls">
+              <button class="act" id="approve">Approve and release</button>
+              <button class="act quiet" id="edit">Request an edit</button>
+              <button class="act quiet" id="reject">Hold and reject</button>
+            </div>
+            <form class="edit" id="editForm" hidden>
+              <label for="editText">What should change before release?</label>
+              <textarea
+                id="editText"
+                placeholder="Name the action and the wording you want."
+              ></textarea>
+              <div class="edit-controls">
+                <button class="act" type="submit">Send the edit</button>
+                <button class="act quiet" type="button" id="editCancel">Cancel</button>
+              </div>
+            </form>
+            <div class="receipt" id="receipt" hidden></div>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        Static sample of one replayed run. Figures come from the seed used by the agents service and
+        are not live readings. Rain at Chiva and Turís and discharge at the Poyo ravine are
+        approximate reconstructions of 29 October 2024 pending validation; the Poyo gauge stopped
+        reporting at 18:00 UTC, which is why the discharge line ends there.
+      </footer>
+    </main>
+
+    <script>
+      "use strict";
+
+      // One replayed run, copied from the agents service. Nothing here is live.
+      const RUN = {
+        question: "Why are our Valencia sites at risk?",
+        answer: [
+          { t: "Extreme rainfall fell over the Poyo ravine catchment" },
+          { c: ["C1", "C2", "C3"] },
+          { t: ". Runoff produced an extreme discharge in the Barranco del Poyo" },
+          { c: ["C4", "C5", "C6", "C7"] },
+          { t: ". The overflow reached built-up areas mapped by Copernicus EMS" },
+          { c: ["C8"] },
+          { t: ". Seven insured sites sit inside the footprint, 21.6m EUR sum insured" },
+          { c: ["C9", "C10"] },
+          { t: "." },
+        ],
+        claims: {
+          C1: {
+            kind: "number",
+            text: "Point chiva recorded 534 mm of rain over 10 hours between 09:00 and 18:00 UTC, peak hour 96 mm.",
+            figures: "534 mm · 10 h · 96 mm/h",
+            view: "floodsense_seed.hazard_timeline",
+            hour: 14,
+          },
+          C2: {
+            kind: "number",
+            text: "Point turis recorded 393 mm of rain over 6 hours between 13:00 and 18:00 UTC, peak hour 185 mm.",
+            figures: "393 mm · 6 h · 185 mm/h",
+            view: "floodsense_seed.hazard_timeline",
+            hour: 16,
+          },
+          C3: {
+            kind: "fact",
+            text: "Warning level red was in force for point chiva from 09:00 UTC.",
+            figures: "red, from 09:00 UTC",
+            view: "floodsense_seed.hazard_timeline",
+            hour: 9,
+          },
+          C4: {
+            kind: "number",
+            text: "Discharge at poyo-ribaroja reached 2282 m³/s at 17:00 UTC, from 6 m³/s at 12:00 UTC.",
+            figures: "2,282 m³/s from 6 m³/s",
+            view: "floodsense_seed.hazard_timeline",
+            hour: 17,
+          },
+          C5: {
+            kind: "fact",
+            text: "The poyo-ribaroja series has no discharge value from 18:00 UTC on. The gauge went out during the peak.",
+            figures: "no value from 18:00 UTC",
+            view: "floodsense_seed.hazard_timeline",
+            hour: 18,
+          },
+          C6: {
+            kind: "number",
+            text: "Daily discharge for poyo-ribaroja was 2100 m³/s on 29 October, up from 3 m³/s on 28 October.",
+            figures: "2,100 m³/s from 3 m³/s",
+            view: "floodsense_seed.discharge_daily",
+            hour: null,
+          },
+          C7: {
+            kind: "cause",
+            text: "Rain began at 09:00 UTC and the discharge peak followed at 17:00 UTC, consistent with catchment runoff driving the river response.",
+            figures: "8 h lag",
+            view: "floodsense_seed.hazard_timeline",
+            hour: 17,
+          },
+          C8: {
+            kind: "number",
+            text: "The Copernicus EMS footprint (EMSR773) covers 7 insured sites across 4 segments.",
+            figures: "7 sites · 4 segments",
+            view: "floodsense_seed.exposure_join",
+            hour: null,
+          },
+          C9: {
+            kind: "number",
+            text: "7 policies sit inside the mapped footprint, sum insured 21,600,000 EUR. The largest is P-1003, retail, 6,500,000 EUR.",
+            figures: "7 policies · 21,600,000 EUR",
+            view: "floodsense_seed.exposure_join",
+            hour: null,
+          },
+          C10: {
+            kind: "number",
+            text: "The most exposed segment is retail: 3 policies, 9,200,000 EUR sum insured.",
+            figures: "3 policies · 9,200,000 EUR",
+            view: "floodsense_seed.exposure_join",
+            hour: null,
+          },
+        },
+        views: {
+          "floodsense_seed.hazard_timeline": {
+            publisher: "AEMET, SAIH Júcar (CHJ)",
+            licence: "AEMET OpenData terms (to confirm), SAIH Júcar (to verify)",
+            sql: "SELECT point_id, ts_utc, rain_mm, discharge_m3s, warning_level\n  FROM floodsense_seed.hazard_timeline\n WHERE ts_utc BETWEEN '2024-10-28T00:00:00Z' AND '2024-10-30T23:59:59Z'",
+          },
+          "floodsense_seed.discharge_daily": {
+            publisher: "Open-Meteo / GloFAS",
+            licence: "CC BY 4.0",
+            sql: "SELECT point_id, date, discharge_m3s, source\n  FROM floodsense_seed.discharge_daily\n WHERE point_id IN ('poyo-ribaroja')\n   AND date BETWEEN '2024-10-28' AND '2024-10-30'",
+          },
+          "floodsense_seed.exposure_join": {
+            publisher: "Copernicus EMS, OpenStreetMap, synthetic portfolio",
+            licence: "Copernicus terms, ODbL",
+            sql: "SELECT policy_id, site_id, lat, lon, segment, sum_insured_eur\n  FROM floodsense_seed.exposure_join\n WHERE in_footprint = 1\n ORDER BY sum_insured_eur DESC",
+          },
+        },
+        chain: [
+          {
+            id: "H1",
+            link: "rain to catchment",
+            statement: "Extreme rainfall fell over the Poyo ravine catchment",
+            status: "supported",
+            rounds: 3,
+            why: "An hour at or above 20 mm at a catchment point. Rain lasted more than one hour. Rain started before the discharge peak.",
+          },
+          {
+            id: "H2",
+            link: "catchment to river",
+            statement: "Runoff produced an extreme discharge in the Barranco del Poyo",
+            status: "supported",
+            rounds: 3,
+            why: "Discharge rose at least tenfold in the window. Daily discharge confirms the rise. A warning was issued for the river point.",
+          },
+          {
+            id: "H3",
+            link: "river to site",
+            statement: "The overflow reached built-up areas mapped by Copernicus EMS",
+            status: "supported",
+            rounds: 3,
+            why: "The footprint contains insured sites, does not swallow every site, and every site inside it carries coordinates.",
+          },
+          {
+            id: "H4",
+            link: "site to exposure",
+            statement: "7 insured sites are exposed",
+            status: "supported",
+            rounds: 0,
+            why: "Deterministic join on exposure_join.in_footprint = 1. No counter-check needed.",
+          },
+        ],
+        judge: [
+          ["Overall", "1.00"],
+          ["Claims scored", "10"],
+          ["Hallucination rate", "0%"],
+          ["Citation coverage", "100%"],
+          ["Numeric accuracy", "100%"],
+          ["Repair rounds", "0"],
+        ],
+        segments: [
+          ["Retail", 3, 9200000],
+          ["Industrial", 2, 5800000],
+          ["Warehouse", 1, 4200000],
+          ["Healthcare", 1, 2400000],
+        ],
+        playbook: [
+          {
+            id: "A1",
+            horizon: 6,
+            outbound: true,
+            text: "Send a safety and claims-readiness message to policyholders at the exposed sites, largest sum insured first: move stock and vehicles above ground level, document damage, do not enter flooded basements.",
+            claims: ["C9", "C10"],
+          },
+          {
+            id: "A2",
+            horizon: 6,
+            outbound: false,
+            text: "Open an event file with the exposed policy list and reserve capacity for the sum insured at risk.",
+            claims: ["C9", "C10", "C1", "C2", "C3"],
+          },
+          {
+            id: "A3",
+            horizon: 24,
+            outbound: true,
+            text: "Pre-assign loss adjusters to the footprint municipalities and book site access once the authority lifts the alert.",
+            claims: ["C9", "C10"],
+          },
+          {
+            id: "A4",
+            horizon: 72,
+            outbound: false,
+            text: "Re-run the exposure join when the Copernicus footprint is updated and the gauges report again, then revise reserves.",
+            claims: ["C1", "C2", "C3"],
+          },
+        ],
+      };
+
+      // Seed series for 29 Oct 2024, hour of day in UTC.
+      const RAIN_CHIVA =
+        { 9: 18, 10: 35, 11: 52, 12: 70, 13: 88, 14: 96, 15: 74, 16: 58, 17: 31, 18: 12 };
+      const RAIN_TURIS = { 13: 20, 14: 42, 15: 71, 16: 185, 17: 60, 18: 15 };
+      const DISCHARGE = { 12: 6, 13: 9, 14: 40, 15: 310, 16: 1686, 17: 2282 };
+      const H0 = 9;
+      const H1 = 20;
+      const RAIN_MAX = 185;
+      const Q_MAX = 2400;
+
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"]/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+        );
+      const eur = (n) => new Intl.NumberFormat("en-GB").format(n);
+      const hhmm = (h) => String(h).padStart(2, "0") + ":00";
+
+      /* Question and answer ---------------------------------------------- */
+
+      $("q").textContent = RUN.question;
+      $("answer").innerHTML = RUN.answer
+        .map((part) =>
+          part.t
+            ? esc(part.t)
+            : "&thinsp;" +
+              part.c
+                .map(
+                  (id) =>
+                    '<button class="cite" data-claim="' +
+                    id +
+                    '" aria-expanded="false">' +
+                    id +
+                    "</button>"
+                )
+                .join("")
+        )
+        .join("");
+
+      let openClaim = null;
+
+      function showClaim(id) {
+        const claim = RUN.claims[id];
+        const view = RUN.views[claim.view];
+        const box = $("evidence");
+        box.innerHTML =
+          '<div class="evidence-head"><span class="evidence-id">' +
+          esc(id) +
+          "</span><span class=\"chain-link\">" +
+          esc(claim.kind) +
+          ' claim</span><button class="dismiss" id="closeClaim">Close</button></div>' +
+          '<p class="evidence-claim">' +
+          esc(claim.text) +
+          "</p>" +
+          '<dl class="evidence-grid">' +
+          "<dt>Figures</dt><dd>" +
+          esc(claim.figures) +
+          "</dd>" +
+          "<dt>Source view</dt><dd>" +
+          esc(claim.view) +
+          "</dd>" +
+          "<dt>Publisher</dt><dd>" +
+          esc(view.publisher) +
+          "</dd>" +
+          "<dt>Licence</dt><dd>" +
+          esc(view.licence) +
+          "</dd>" +
+          "<dt>Judge</dt><dd>grounded, citation faithful, numbers match</dd>" +
+          "</dl>" +
+          '<pre class="evidence-sql">' +
+          esc(view.sql) +
+          "</pre>";
+        box.hidden = false;
+        $("closeClaim").addEventListener("click", closeClaim);
+
+        document
+          .querySelectorAll(".cite")
+          .forEach((b) => b.setAttribute("aria-expanded", String(b.dataset.claim === id)));
+        openClaim = id;
+        if (claim.hour != null) setCursor(claim.hour);
+      }
+
+      function closeClaim() {
+        $("evidence").hidden = true;
+        $("evidence").innerHTML = "";
+        document.querySelectorAll(".cite").forEach((b) => b.setAttribute("aria-expanded", "false"));
+        openClaim = null;
+      }
+
+      $("answer").addEventListener("click", (e) => {
+        const btn = e.target.closest(".cite");
+        if (!btn) return;
+        if (btn.dataset.claim === openClaim) closeClaim();
+        else showClaim(btn.dataset.claim);
+      });
+
+      /* Hydrograph -------------------------------------------------------- */
+
+      const svg = $("chart");
+      const NS = "http://www.w3.org/2000/svg";
+      const PAD = { l: 48, r: 12, t: 18, b: 28 };
+      const RAIN_BAND = 92;
+      const GAP = 22;
+      const Q_BAND = 172;
+      const HEIGHT = PAD.t + RAIN_BAND + GAP + Q_BAND + PAD.b;
+      let cursorHour = 16;
+      let plotW = 600;
+
+      const el = (name, attrs, text) => {
+        const node = document.createElementNS(NS, name);
+        for (const k in attrs) node.setAttribute(k, attrs[k]);
+        if (text != null) node.textContent = text;
+        return node;
+      };
+      const x = (h) => PAD.l + ((h - H0) / (H1 - H0)) * plotW;
+      const yRain = (mm) => PAD.t + (mm / RAIN_MAX) * RAIN_BAND;
+      const qBase = PAD.t + RAIN_BAND + GAP + Q_BAND;
+      const yQ = (q) => qBase - (q / Q_MAX) * Q_BAND;
+
+      function drawChart() {
+        const w = svg.parentNode.clientWidth || 600;
+        plotW = Math.max(240, w - PAD.l - PAD.r);
+        svg.setAttribute("viewBox", "0 0 " + (plotW + PAD.l + PAD.r) + " " + HEIGHT);
+        svg.setAttribute("height", HEIGHT);
+        svg.setAttribute(
+          "aria-label",
+          "Rain at Chiva peaked at 96 mm in the hour to 14:00 UTC and at Turís at 185 mm " +
+            "in the hour to 16:00. Discharge in the Poyo ravine rose from 6 to 2282 cubic " +
+            "metres per second between 12:00 and 17:00, " +
+            "then the gauge stopped reporting."
+        );
+        svg.textContent = "";
+
+        // Discharge gridlines and labels.
+        [0, 1200, 2400].forEach((q) => {
+          svg.appendChild(
+            el("line", {
+              x1: PAD.l,
+              x2: PAD.l + plotW,
+              y1: yQ(q),
+              y2: yQ(q),
+              stroke: q === 0 ? "var(--ink)" : "var(--rule)",
+            })
+          );
+          svg.appendChild(
+            el(
+              "text",
+              { x: PAD.l - 8, y: yQ(q) + 4, "text-anchor": "end", class: "ax" },
+              eur(q)
+            )
+          );
+        });
+
+        // Rain hangs from the top, the way a hyetograph is drawn.
+        svg.appendChild(
+          el("line", { x1: PAD.l, x2: PAD.l + plotW, y1: PAD.t, y2: PAD.t, stroke: "var(--rule)" })
+        );
+        const bw = Math.min(11, (plotW / (H1 - H0)) * 0.36);
+        for (let h = H0; h <= H1; h++) {
+          const pair = [
+            [RAIN_CHIVA[h], "var(--river-pale)", -1],
+            [RAIN_TURIS[h], "var(--river)", 1],
+          ];
+          pair.forEach(([mm, fill, side]) => {
+            if (!mm) return;
+            svg.appendChild(
+              el("rect", {
+                x: x(h) + (side < 0 ? -bw - 1 : 1),
+                y: PAD.t,
+                width: bw,
+                height: Math.max(1, yRain(mm) - PAD.t),
+                fill: fill,
+              })
+            );
+          });
+        }
+        svg.appendChild(
+          el(
+            "text",
+            { x: x(16) + 13, y: yRain(RAIN_MAX) - 3, class: "ax strong" },
+            "185 mm in one hour"
+          )
+        );
+
+        // Discharge line up to the last reading.
+        const read = Object.keys(DISCHARGE).map(Number).sort((a, b) => a - b);
+        svg.appendChild(
+          el("polyline", {
+            points: read.map((h) => x(h) + "," + yQ(DISCHARGE[h])).join(" "),
+            fill: "none",
+            stroke: "var(--ink)",
+            "stroke-width": 1.75,
+          })
+        );
+        read.forEach((h) =>
+          svg.appendChild(
+            el("circle", { cx: x(h), cy: yQ(DISCHARGE[h]), r: 2.4, fill: "var(--ink)" })
+          )
+        );
+
+        // The gauge went out at 18:00. Draw the silence, do not interpolate it.
+        const last = read[read.length - 1];
+        svg.appendChild(
+          el("line", {
+            x1: x(last),
+            x2: x(last + 1),
+            y1: yQ(DISCHARGE[last]),
+            y2: yQ(DISCHARGE[last]),
+            stroke: "var(--gauge)",
+            "stroke-width": 1.5,
+            "stroke-dasharray": "3 3",
+          })
+        );
+        svg.appendChild(
+          el("circle", {
+            cx: x(last + 1),
+            cy: yQ(DISCHARGE[last]),
+            r: 3,
+            fill: "var(--paper)",
+            stroke: "var(--gauge)",
+            "stroke-width": 1.5,
+          })
+        );
+        svg.appendChild(
+          el(
+            "text",
+            { x: x(last + 1) + 8, y: yQ(DISCHARGE[last]) + 4, class: "ax gauge" },
+            "gauge stops reporting"
+          )
+        );
+
+        // ES-Alert to phones, 19:11 UTC.
+        const alertX = x(19 + 11 / 60);
+        svg.appendChild(
+          el("path", {
+            d: "M" + (alertX - 4) + "," + (qBase + 7) + "h8l-4,-7z",
+            fill: "var(--gauge)",
+          })
+        );
+        svg.appendChild(
+          el(
+            "text",
+            { x: alertX, y: qBase + 21, "text-anchor": "middle", class: "ax gauge" },
+            "ES-Alert 19:11"
+          )
+        );
+
+        // Hour ticks, every third hour so the axis stays quiet.
+        for (let h = H0; h <= H1; h += 3) {
+          svg.appendChild(
+            el("text", { x: x(h), y: qBase + 21, "text-anchor": "middle", class: "ax" }, hhmm(h))
+          );
+        }
+
+        svg.appendChild(el("line", { id: "cursor", stroke: "var(--river)", "stroke-width": 1 }));
+
+        const style = el("style");
+        style.textContent =
+          ".ax{font:11.5px Archivo,sans-serif;fill:var(--ink-soft)}" +
+          ".strong{fill:var(--river)}" +
+          ".gauge{fill:var(--gauge)}";
+        svg.appendChild(style);
+
+        paintCursor();
+      }
+
+      function paintCursor() {
+        const line = svg.querySelector("#cursor");
+        if (!line) return;
+        line.setAttribute("x1", x(cursorHour));
+        line.setAttribute("x2", x(cursorHour));
+        line.setAttribute("y1", PAD.t);
+        line.setAttribute("y2", qBase);
+        const q = DISCHARGE[cursorHour];
+        $("r-hour").textContent = hhmm(cursorHour);
+        $("r-chiva").textContent = RAIN_CHIVA[cursorHour] ? RAIN_CHIVA[cursorHour] + " mm" : "—";
+        $("r-turis").textContent = RAIN_TURIS[cursorHour] ? RAIN_TURIS[cursorHour] + " mm" : "—";
+        $("r-poyo").textContent =
+          q != null ? eur(q) + " m³/s" : cursorHour >= 18 ? "no reading" : "—";
+      }
+
+      function setCursor(h) {
+        cursorHour = Math.min(H1, Math.max(H0, Math.round(h)));
+        paintCursor();
+      }
+
+      svg.addEventListener("pointermove", (e) => {
+        const box = svg.getBoundingClientRect();
+        const scale = (plotW + PAD.l + PAD.r) / box.width;
+        setCursor(H0 + (((e.clientX - box.left) * scale - PAD.l) / plotW) * (H1 - H0));
+      });
+
+      svg.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowLeft") setCursor(cursorHour - 1);
+        else if (e.key === "ArrowRight") setCursor(cursorHour + 1);
+        else return;
+        e.preventDefault();
+      });
+
+      /* Chain, judge, exposure ------------------------------------------- */
+
+      $("chain").innerHTML = RUN.chain
+        .map(
+          (h) =>
+            "<li><span class=\"chain-id\">" +
+            esc(h.id) +
+            '</span><div><span class="chain-link">' +
+            esc(h.link) +
+            '</span><div class="chain-statement">' +
+            esc(h.statement) +
+            '</div><p class="chain-why">' +
+            esc(h.why) +
+            '</p></div><span class="verdict"><b>' +
+            esc(h.status) +
+            '</b><span class="rounds">' +
+            (h.rounds ? h.rounds + " counter-checks" : "no counter-check") +
+            "</span></span></li>"
+        )
+        .join("");
+
+      $("judge").innerHTML =
+        "<tbody>" +
+        RUN.judge
+          .map((row) => "<tr><td>" + esc(row[0]) + "</td><td>" + esc(row[1]) + "</td></tr>")
+          .join("") +
+        "</tbody>";
+
+      const TOTAL = RUN.segments.reduce((a, s) => a + s[2], 0);
+      $("exposure").innerHTML =
+        "<thead><tr><th>Segment</th><th>Policies</th>" +
+        "<th>Sum insured, EUR</th></tr></thead><tbody>" +
+        RUN.segments
+          .map(
+            (s) =>
+              "<tr><td>" +
+              esc(s[0]) +
+              "</td><td>" +
+              s[1] +
+              "</td><td>" +
+              eur(s[2]) +
+              '<i class="bar" style="width:' +
+              ((s[2] / TOTAL) * 100).toFixed(1) +
+              '%"></i></td></tr>'
+          )
+          .join("") +
+        "</tbody><tfoot><tr><td>Inside the footprint</td><td>7</td><td>" +
+        eur(TOTAL) +
+        "</td></tr></tfoot>";
+
+      /* Playbook and decision -------------------------------------------- */
+
+      let decided = false;
+
+      function drawPlaybook(state) {
+        $("playbook").innerHTML = RUN.playbook
+          .map((a) => {
+            const s = state(a);
+            return (
+              '<li><div class="action-top"><span>' +
+              esc(a.id) +
+              "</span><span>within " +
+              a.horizon +
+              " h</span><span>" +
+              (a.outbound ? "leaves the building" : "internal") +
+              '</span><span class="state" data-state="' +
+              s +
+              '">' +
+              s +
+              '</span></div><p class="action-text">' +
+              esc(a.text) +
+              '</p><p class="action-claims">Rests on ' +
+              a.claims.join(", ") +
+              "</p></li>"
+            );
+          })
+          .join("");
+      }
+
+      drawPlaybook(() => "held");
+
+      function decide(verdict, note) {
+        decided = true;
+        const released = verdict === "approved";
+        drawPlaybook((a) => (released ? "released" : a.outbound ? "withheld" : "held"));
+        $("m-status").textContent = released
+          ? "Approved"
+          : verdict === "edited"
+            ? "Edit requested"
+            : "Rejected";
+        const when = new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+        const head =
+          verdict === "approved"
+            ? "<b>Approved by zain at " + when + ".</b> Four actions released."
+            : verdict === "edited"
+              ? "<b>Edit requested by zain at " + when + ".</b> Nothing has left the building."
+              : "<b>Held by zain at " + when + ".</b> The two outbound actions are withheld.";
+        const r = $("receipt");
+        r.innerHTML = head + (note ? "<span>" + esc(note) + "</span>" : "");
+        r.hidden = false;
+        r.classList.remove("flash");
+        void r.offsetWidth;
+        r.classList.add("flash");
+        ["approve", "edit", "reject"].forEach((id) => ($(id).disabled = true));
+        $("editForm").hidden = true;
+      }
+
+      $("approve").addEventListener("click", () => decide("approved"));
+
+      $("reject").addEventListener("click", () =>
+        decide("rejected", "Reason: the AEMET and SAIH Júcar licences are unconfirmed.")
+      );
+
+      $("edit").addEventListener("click", () => {
+        if (decided) return;
+        $("editForm").hidden = false;
+        $("editText").focus();
+      });
+
+      $("editCancel").addEventListener("click", () => {
+        $("editForm").hidden = true;
+        $("editText").value = "";
+      });
+
+      $("editForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const note = $("editText").value.trim();
+        decide("edited", note || "No wording given.");
+      });
+
+      /* Boot -------------------------------------------------------------- */
+
+      drawChart();
+      let resizeTimer;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(drawChart, 120);
+      });
+    </script>
+  </body>
+</html>
