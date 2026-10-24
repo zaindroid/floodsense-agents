@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import time
 
+from floodsense_agents.governance import DEFINITIONS
 from floodsense_agents.models import Evidence, Hypothesis
 from floodsense_agents.nightshift import parse_json
 from floodsense_agents.nodes.watchers import window
@@ -30,10 +31,10 @@ def _checks_for(h: Hypothesis, state: FloodState) -> list[tuple[str, str]]:
     if h.link == "rain->catchment":
         return [
             (
-                "rain was extreme (an hour >= 20 mm at a catchment point)",
+                DEFINITIONS["extreme_rain"].wording,
                 f"SELECT point_id, MAX(rain_mm) AS max_mm FROM {s}.hazard_timeline WHERE point_id "
                 f"IN ({rain_pts}) AND ts_utc BETWEEN '{t0}' AND '{t1}' GROUP BY point_id HAVING "
-                f"MAX(rain_mm) >= 20",
+                f"MAX(rain_mm) >= {DEFINITIONS['extreme_rain'].value}",
             ),
             (
                 "rain lasted more than one hour",
@@ -53,7 +54,7 @@ def _checks_for(h: Hypothesis, state: FloodState) -> list[tuple[str, str]]:
     if h.link == "catchment->river":
         return [
             (
-                "discharge rose at least tenfold in the window",
+                DEFINITIONS["extreme_discharge_rise"].wording,
                 f"SELECT MAX(discharge_m3s) AS mx, MIN(discharge_m3s) AS mn FROM "
                 f"{s}.hazard_timeline WHERE point_id IN ({river_pts}) AND discharge_m3s IS NOT "
                 f"NULL AND ts_utc BETWEEN '{t0}' AND '{t1}' HAVING MAX(discharge_m3s) >= 10 * "

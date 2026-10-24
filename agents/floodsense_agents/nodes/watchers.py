@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import time
 
+from floodsense_agents.governance import DEFINITIONS
 from floodsense_agents.models import Anomaly
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, add_evidence, trace
@@ -24,14 +25,16 @@ def make(deps: Deps):
     def watchers(state: FloodState) -> dict:
         t = time.time()
         s = settings.schema
+        rain_at = DEFINITIONS["anomaly_rain"]
+        flow_at = DEFINITIONS["anomaly_discharge"]
         t0, t1 = window(state)
         q = {
             "rain": f"SELECT point_id, ts_utc, rain_mm FROM {s}.hazard_timeline WHERE ts_utc "
             f"BETWEEN "
-            f"'{t0}' AND '{t1}' AND rain_mm >= 30 ORDER BY rain_mm DESC",
+            f"'{t0}' AND '{t1}' AND rain_mm >= {rain_at.value} ORDER BY rain_mm DESC",
             "discharge": f"SELECT point_id, ts_utc, discharge_m3s FROM {s}.hazard_timeline WHERE "
             f"ts_utc BETWEEN "
-            f"'{t0}' AND '{t1}' AND discharge_m3s >= 100 ORDER BY discharge_m3s DESC",
+            f"'{t0}' AND '{t1}' AND discharge_m3s >= {flow_at.value} ORDER BY discharge_m3s DESC",
             "warning": f"SELECT point_id, MIN(ts_utc) AS first_utc, warning_level FROM "
             f"{s}.hazard_timeline "
             f"WHERE ts_utc BETWEEN '{t0}' AND '{t1}' "
@@ -52,7 +55,7 @@ def make(deps: Deps):
                     ts_utc=r["ts_utc"],
                     value=r["rain_mm"],
                     unit="mm/h",
-                    why="hourly rain at or above 30 mm",
+                    why=rain_at.wording,
                     query_id=evid["rain"].query_id,
                 )
             )
@@ -65,7 +68,7 @@ def make(deps: Deps):
                     ts_utc=r["ts_utc"],
                     value=r["discharge_m3s"],
                     unit="m3/s",
-                    why="discharge at or above 100 m3/s",
+                    why=flow_at.wording,
                     query_id=evid["discharge"].query_id,
                 )
             )

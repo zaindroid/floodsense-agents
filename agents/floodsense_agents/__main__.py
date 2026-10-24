@@ -10,6 +10,7 @@ GET  /health                       liveness: service, graph, version. Touches no
 GET  /ready                        readiness: Zetaris answers a trivial query (503 if not)
 GET  /version                      build sha and timestamp
 GET  /config                       flags, lanes, schema, checkpointer (no secrets)
+GET  /readiness                    the eight foundations checked against the newest run
 POST /runs                         RunRequest -> runs until the HITL interrupt; returns the run snapshot (status awaiting_approval)
 GET  /runs/past                    runs started by this process, newest first (the checkpointer holds every run's state)
 GET  /runs/{id}                    snapshot: contract state + claims, evidence, judge_summary, trace
@@ -34,6 +35,7 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 
 from floodsense_agents import __version__
 from floodsense_agents.models import ApprovalDecision, RunRequest
+from floodsense_agents.readiness import report as readiness_report
 from floodsense_agents.runtime import NotAwaitingApproval, RunNotFound, Runtime
 from floodsense_agents.settings import settings
 
@@ -80,6 +82,18 @@ def _mock_page(name: str) -> FileResponse:
 @app.get("/", include_in_schema=False)
 def console():
     return FileResponse(CONSOLE, media_type="text/html")
+
+
+@app.get("/readiness", include_in_schema=False)
+def readiness(run_id: str | None = None):
+    """The eight foundations, checked against one run. Newest run by default."""
+    rt = runtime()
+    if run_id is None:
+        past = rt.past(limit=1)
+        run_id = past[0]["run_id"] if past else None
+    run = rt.snapshot(run_id) if run_id else {}
+    routes = {getattr(r, "path", "") for r in app.routes}
+    return _live(readiness_report(run, rt.deps, routes))
 
 
 @app.get("/mock", include_in_schema=False)
