@@ -51,7 +51,11 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("FloodSense EU", r.text)
 
     def test_mock_serves_both_views_and_their_data(self) -> None:
-        plain = self.c.get("/mock")
+        bare = self.c.get("/mock", follow_redirects=False)
+        self.assertEqual(bare.status_code, 308)
+        self.assertEqual(bare.headers["location"], "/mock/")
+
+        plain = self.c.get("/mock/")
         self.assertEqual(plain.status_code, 200)
         self.assertIn("text/html", plain.headers["content-type"])
         self.assertIn("Analyst view", plain.text)

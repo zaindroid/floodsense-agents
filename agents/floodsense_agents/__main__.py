@@ -4,7 +4,7 @@ Routes follow the contract in docs/GAMEPLAN.md §5.5. Every response carries
 served_from (live | cache | replay) and cached_at.
 
 GET  /                             review console, one page, served from console.html
-GET  /mock                         design mock, plain view for a non-specialist (ui/mock)
+GET  /mock/                        design mock, plain view for a non-specialist (ui/mock)
 GET  /mock/analyst                 design mock, analyst view: chain, judge, playbook, decision
 GET  /health                       liveness: service, graph, version. Touches nothing.
 GET  /ready                        readiness: Zetaris answers a trivial query (503 if not)
@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 
 from floodsense_agents import __version__
 from floodsense_agents.models import ApprovalDecision, RunRequest
@@ -84,6 +84,13 @@ def console():
 
 @app.get("/mock", include_in_schema=False)
 def mock():
+    # The pages link to each other and to data.js by relative path, so the
+    # browser needs the trailing slash or they resolve against the site root.
+    return RedirectResponse("/mock/", status_code=308)
+
+
+@app.get("/mock/", include_in_schema=False)
+def mock_index():
     return _mock_page("index.html")
 
 
