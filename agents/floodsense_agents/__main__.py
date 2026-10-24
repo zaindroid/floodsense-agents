@@ -3,6 +3,7 @@
 Routes follow the contract in docs/GAMEPLAN.md §5.5. Every response carries
 served_from (live | cache | replay) and cached_at.
 
+GET  /                             review console, one page, served from console.html
 GET  /health                       liveness: service, graph, version. Touches nothing.
 GET  /ready                        readiness: Zetaris answers a trivial query (503 if not)
 GET  /version                      build sha and timestamp
@@ -24,9 +25,10 @@ import asyncio
 import json
 import logging
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from floodsense_agents import __version__
 from floodsense_agents.models import ApprovalDecision, RunRequest
@@ -35,6 +37,7 @@ from floodsense_agents.settings import settings
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 app = FastAPI(title="FloodSense EU — agents", version=__version__)
+CONSOLE = Path(__file__).resolve().parent / "console.html"
 _rt: Runtime | None = None
 
 
@@ -54,6 +57,11 @@ def _live(body: dict) -> dict:
     body.setdefault("served_from", "live")
     body.setdefault("cached_at", None)
     return body
+
+
+@app.get("/", include_in_schema=False)
+def console():
+    return FileResponse(CONSOLE, media_type="text/html")
 
 
 def _dep_name(rt: Runtime, attr: str) -> str:

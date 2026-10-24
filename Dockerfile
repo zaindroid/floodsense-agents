@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY agents/floodsense_agents ./floodsense_agents
 
 # Rewritten on every sync by .github/workflows/sync-from-monorepo.yml.
-ENV GIT_SHA=c54986b7c608b94e01a507687d84f9210ce9f742 BUILT_AT=2026-10-24T08:26:15Z
+ENV GIT_SHA=e7f82d825fbfd39d807c3d1302c6c54bf04e46d7 BUILT_AT=2026-10-24T09:09:46Z
 
 # 8080 is the only port Coolify's healthcheck targets. Runs on the stand-ins:
 # no Zetaris or Meterless credentials, so no secrets reach this image.

@@ -43,6 +43,12 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("FF_HITL", cfg["flags"])
         self.assertIn("nemotron", cfg["lanes"]["deep"])
 
+    def test_console_is_served_at_the_root(self) -> None:
+        r = self.c.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/html", r.headers["content-type"])
+        self.assertIn("FloodSense EU", r.text)
+
     def test_ready_and_version(self) -> None:
         ready = self.c.get("/ready").json()
         self.assertEqual(ready["status"], "ready")
