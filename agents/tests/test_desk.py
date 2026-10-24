@@ -177,6 +177,34 @@ class DeskTest(unittest.TestCase):
             self.assertIn(kind, r.headers["content-type"])
         self.assertEqual(self.c.get("/app/console.html").status_code, 404)
 
+    def test_pages_are_never_cached_and_their_assets_are_pinned_to_the_build(self) -> None:
+        # A CDN in front of this served a four-hour-stale bundle once already.
+        page = self.c.get("/app/")
+        self.assertIn("no-store", page.headers["cache-control"])
+        self.assertIn(".js?v=", page.text)
+        self.assertIn(".css?v=", page.text)
+        self.assertNotIn(
+            'href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap?v=',
+            page.text,
+        )
+
+        bare = self.c.get("/app/app.js")
+        self.assertIn("no-cache", bare.headers["cache-control"])
+        pinned = self.c.get("/app/app.js?v=abc123")
+        self.assertIn("immutable", pinned.headers["cache-control"])
+        self.assertEqual(bare.text, pinned.text)
+
+        for url in ("/mock/", "/console"):
+            r = self.c.get(url)
+            self.assertIn("no-store", r.headers["cache-control"], url)
+
+    def test_the_case_screen_offers_the_step_by_step_overlay(self) -> None:
+        app_js = self.c.get("/app/app.js").text
+        self.assertIn('id="stepwise"', app_js)
+        self.assertIn("window.showWorking(run.run_id)", app_js)
+        self.assertIn("showWorking", self.c.get("/app/verify.js").text)
+        self.assertIn("verify.js", self.c.get("/app/").text)
+
     def test_the_earlier_pages_keep_their_own_urls(self) -> None:
         self.assertEqual(self.c.get("/console").status_code, 200)
         self.assertEqual(self.c.get("/mock/").status_code, 200)

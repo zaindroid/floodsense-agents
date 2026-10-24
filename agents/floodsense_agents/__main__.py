@@ -36,12 +36,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import (
     FileResponse,
+    HTMLResponse,
     PlainTextResponse,
     RedirectResponse,
     StreamingResponse,
@@ -96,16 +98,43 @@ def _live(body: dict) -> dict:
 
 
 _TYPES = {".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
+# A CDN in front of this will happily serve a stale bundle for hours. Pages are
+# never cached; assets are, but only under a URL that carries the build sha.
+_ASSET_REF = re.compile(r'(src|href)="(?!https?:|//)([^"]+\.(?:js|css))"')
 
 
-def _static(root, name: str) -> FileResponse:
+def _resolve(root, name: str):
     if root is None:
         raise HTTPException(404, "this page was not copied into the build")
     path = (root / name).resolve()
     # Direct children only. {name} never contains a slash, but ".." would.
     if path.parent != root.resolve() or not path.is_file():
         raise HTTPException(404, f"no file named {name}")
-    return FileResponse(path, media_type=_TYPES.get(path.suffix, "text/html"))
+    return path
+
+
+def _static(root, name: str, versioned: bool = False) -> FileResponse:
+    path = _resolve(root, name)
+    if path.suffix in ("", ".html"):
+        return _page(root, name)
+    return FileResponse(
+        path,
+        media_type=_TYPES.get(path.suffix, "text/html"),
+        headers={
+            "cache-control": "public, max-age=31536000, immutable"
+            if versioned
+            else "no-cache, must-revalidate"
+        },
+    )
+
+
+def _page(root, name: str) -> HTMLResponse:
+    """An HTML page, with its own assets pinned to this build."""
+    path = _resolve(root, name)
+    sha = (settings.git_sha or "dev")[:12]
+    pinned = r'\1="\2?v=' + sha + '"'
+    html = _ASSET_REF.sub(pinned, path.read_text(encoding="utf-8"))
+    return HTMLResponse(html, headers={"cache-control": "no-store, must-revalidate"})
 
 
 def _mock_page(name: str) -> FileResponse:
@@ -119,7 +148,7 @@ def home():
 
 @app.get("/console", include_in_schema=False)
 def console():
-    return FileResponse(CONSOLE, media_type="text/html")
+    return _page(CONSOLE.parent, CONSOLE.name)
 
 
 @app.get("/app", include_in_schema=False)
@@ -133,8 +162,8 @@ def app_index():
 
 
 @app.get("/app/{name}", include_in_schema=False)
-def app_asset(name: str):
-    return _static(APP_DIR, name)
+def app_asset(name: str, v: str | None = None):
+    return _static(APP_DIR, name, versioned=bool(v))
 
 
 @app.get("/desk/events", include_in_schema=False)
@@ -233,8 +262,8 @@ def mock_analyst():
 
 
 @app.get("/mock/{name}", include_in_schema=False)
-def mock_asset(name: str):
-    return _mock_page(name)
+def mock_asset(name: str, v: str | None = None):
+    return _static(MOCK_DIR, name, versioned=bool(v))
 
 
 def _dep_name(rt: Runtime, attr: str) -> str:

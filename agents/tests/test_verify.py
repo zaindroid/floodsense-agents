@@ -192,6 +192,56 @@ class VerifyTest(unittest.TestCase):
         step = verify.hitl(run)
         self.assertTrue(any("matches the decision" in c.name for c in step.checks if not c.ok))
 
+    # --- how the agents handed work to each other ------------------------
+
+    def test_the_handoffs_trace_the_whole_chain(self) -> None:
+        rep = verify.report(self.snap)
+        edges = [(h["frm"], h["to"]) for h in rep["handoffs"]]
+        self.assertEqual(
+            edges,
+            [
+                ("watchers", "investigator"),
+                ("investigator", "skeptic"),
+                ("skeptic", "exposure"),
+                ("exposure", "playbook"),
+                ("playbook", "judge"),
+                ("judge", "hitl"),
+                ("hitl", "released"),
+            ],
+        )
+        # Every forward edge carries something counted from the run.
+        for h in rep["handoffs"]:
+            self.assertTrue(h["carried"], h)
+
+    def test_each_handoff_carries_what_the_run_actually_holds(self) -> None:
+        rep = verify.report(self.snap)
+        by = {
+            (h["frm"], h["to"]): {c["what"]: c["n"] for c in h["carried"]} for h in rep["handoffs"]
+        }
+        self.assertEqual(by[("watchers", "investigator")]["anomalies"], len(self.snap["anomalies"]))
+        self.assertEqual(by[("investigator", "skeptic")]["cited claims"], len(self.snap["claims"]))
+        self.assertEqual(
+            by[("exposure", "playbook")]["sum insured EUR"],
+            self.snap["exposure"]["sum_insured_eur"],
+        )
+        self.assertEqual(by[("judge", "hitl")]["overall"], "1.00")
+        self.assertEqual(by[("hitl", "released")]["decision"], "approve")
+
+    def test_a_back_edge_is_hidden_when_it_never_fired(self) -> None:
+        rep = verify.report(self.snap)
+        self.assertEqual(rep["loops"], {"revise_rounds": 0, "repair_rounds": 0})
+        self.assertFalse([h for h in rep["handoffs"] if h["kind"] == "loop"])
+
+    def test_a_back_edge_shows_up_with_its_count_when_it_did_fire(self) -> None:
+        run = self.fresh()
+        run["revise_rounds"] = 2
+        run["repair_rounds"] = 1
+        loops = [h for h in verify.handoffs(run) if h["kind"] == "loop"]
+        self.assertEqual(
+            [(h["frm"], h["to"], h["fired"]) for h in loops],
+            [("skeptic", "investigator", 2), ("judge", "playbook", 1)],
+        )
+
     def test_an_agent_that_never_ran_is_not_counted_as_verified(self) -> None:
         rep = verify.report({})
         self.assertEqual(rep["verified"], 0)

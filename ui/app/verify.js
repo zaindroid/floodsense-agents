@@ -42,7 +42,20 @@
 .vfy-path dd{margin:0;color:var(--ink,#1b1f24)}
 .vfy-body{display:grid;grid-template-columns:minmax(0,240px) minmax(0,1fr);gap:0 28px;padding:18px 24px 24px}
 .vfy-pipe{list-style:none;margin:0;padding:0}
-.vfy-pipe li{margin-bottom:2px}
+.vfy-pipe li{margin:0}
+.vfy-hand{display:block;width:100%;text-align:left;font:inherit;background:none;border:0;
+  border-left:1px solid var(--rule,#dcdcd6);margin-left:13px;padding:5px 0 5px 14px;cursor:pointer}
+.vfy-hand:hover .vfy-carry{color:var(--ink,#1b1f24)}
+.vfy-carry{font-size:11.5px;color:var(--soft,#5c636c);line-height:1.4;display:block}
+.vfy-hand[aria-current=true] .vfy-carry{color:var(--ink,#1b1f24);font-weight:500}
+.vfy-hand.loop{border-left:1px dashed var(--hold,#9a6b1f)}
+.vfy-hand.loop .vfy-carry{color:var(--hold,#9a6b1f)}
+.vfy-tabs{display:flex;gap:4px;margin:0 0 14px}
+.vfy-tab{font:inherit;font-size:13px;padding:5px 11px;border:1px solid var(--rule,#dcdcd6);
+  background:none;border-radius:3px;cursor:pointer;color:var(--soft,#5c636c)}
+.vfy-tab[aria-selected=true]{background:var(--ink,#1b1f24);border-color:var(--ink,#1b1f24);
+  color:var(--paper,#fafaf8)}
+.vfy-flowhead{font-size:11.5px;color:var(--soft,#5c636c);margin:0 0 8px}
 .vfy-agent{display:flex;align-items:center;gap:9px;width:100%;text-align:left;font:inherit;
   cursor:pointer;border:1px solid var(--rule,#dcdcd6);border-left-width:3px;
   background:var(--wash,#f2f2ee);padding:9px 11px}
@@ -108,6 +121,7 @@
 
   let data = null;
   let picked = 0;
+  let shown = null;
 
   function close() {
     scrim.hidden = true;
@@ -142,6 +156,7 @@
     }
     const bad = data.steps.findIndex((s) => s.status !== "verified");
     picked = bad === -1 ? 0 : bad;
+    shown = null;
     draw();
   };
 
@@ -160,15 +175,28 @@
       data.checks_run +
       ' checks</span><button class="vfy-x">Close</button></div>' +
       pathHtml(p) +
-      '<div class="vfy-body"><ul class="vfy-pipe">' +
-      data.steps.map(agentHtml).join("") +
-      "</ul>" +
-      stepHtml(s) +
+      '<div class="vfy-body"><div><p class="vfy-flowhead">' +
+      (data.loops && (data.loops.revise_rounds || data.loops.repair_rounds)
+        ? "The chain looped back " +
+          (data.loops.revise_rounds + data.loops.repair_rounds) +
+          " time(s) before it settled."
+        : "Straight through, no agent sent work back.") +
+      '</p><ul class="vfy-pipe">' +
+      flowHtml() +
+      "</ul></div>" +
+      (shown && shown.kind ? handoffHtml(shown) : stepHtml(s)) +
       "</div>";
     panel.querySelector(".vfy-x").addEventListener("click", close);
     panel.querySelectorAll(".vfy-agent").forEach((b) =>
       b.addEventListener("click", () => {
         picked = Number(b.dataset.i);
+        shown = null;
+        draw();
+      })
+    );
+    panel.querySelectorAll(".vfy-hand").forEach((b) =>
+      b.addEventListener("click", () => {
+        shown = data.handoffs[Number(b.dataset.h)];
         draw();
       })
     );
@@ -199,6 +227,70 @@
       "</dd></div><div><dt>errors</dt><dd>" +
       p.errors +
       "</dd></div></dl></div>"
+    );
+  }
+
+  function flowHtml() {
+    const hands = data.handoffs || [];
+    return data.steps
+      .map((s, i) => {
+        const out = hands
+          .map((h, hi) => [h, hi])
+          .filter(([h]) => h.frm === s.agent)
+          .map(([h, hi]) => handRailHtml(h, hi))
+          .join("");
+        return "<li>" + agentHtml(s, i) + out + "</li>";
+      })
+      .join("");
+  }
+
+  function handRailHtml(h, hi) {
+    const n = data.handoffs.indexOf(h);
+    return (
+      '<button class="vfy-hand ' +
+      (h.kind === "loop" ? "loop" : "") +
+      '" data-h="' +
+      (hi == null ? n : hi) +
+      '" aria-current="' +
+      (shown === h) +
+      '"><span class="vfy-carry">' +
+      (h.kind === "loop" ? "back to " + esc(h.to) + ": " : "to " + esc(h.to) + ": ") +
+      esc(
+        h.carried.length
+          ? h.carried.map((c) => c.what + " " + fmtN(c.n)).join(", ")
+          : "nothing recorded"
+      ) +
+      "</span></button>"
+    );
+  }
+
+  function fmtN(n) {
+    return typeof n === "number" && n >= 1000 ? n.toLocaleString("en-GB") : String(n);
+  }
+
+  function handoffHtml(h) {
+    return (
+      '<div><p class="vfy-does">' +
+      (h.kind === "loop"
+        ? esc(h.frm) + " sent work back to " + esc(h.to) + "."
+        : esc(h.frm) + " handed this to " + esc(h.to) + ".") +
+      '</p><p class="vfy-sum">' +
+      (h.kind === "loop"
+        ? "A back edge in the graph. It fired " + h.fired + " time(s) in this run."
+        : "Counted from the run record, not from what either agent said it did.") +
+      "</p><h3>What crossed</h3><dl class=\"vfy-made\">" +
+      h.carried
+        .map(
+          (c) =>
+            "<div><dd>" +
+            esc(fmtN(c.n)) +
+            "</dd><dt>" +
+            esc(c.what) +
+            "</dt></div>"
+        )
+        .join("") +
+      '</dl><p class="vfy-sum" style="margin-top:18px">Pick an agent on the left to see its ' +
+      "own checks and the queries it ran.</p></div>"
     );
   }
 

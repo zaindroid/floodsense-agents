@@ -448,6 +448,111 @@ def hitl(run: dict) -> Step:
 STEPS = (watchers, investigator, skeptic, exposure, playbook, judge, hitl)
 
 
+def handoffs(run: dict) -> list[dict[str, Any]]:
+    """What each agent actually passed to the next, counted from the run.
+
+    The graph has two back edges: the Skeptic can send a link back to the
+    Investigator to argue again, and the Judge can send the playbook back for
+    one repair round. Both are reported with the number of times they fired,
+    so a chain that needed three attempts does not read like one that did not.
+    """
+    exp = run.get("exposure") or {}
+    hyps = run.get("hypotheses") or []
+    claims = run.get("claims") or []
+    actions = run.get("playbook") or []
+    summary = run.get("judge_summary") or {}
+    ap = run.get("approval") or {}
+    ev = _evidence(run)
+
+    def carried(*pairs):
+        return [{"what": w, "n": n} for w, n in pairs if n not in (None, "")]
+
+    out = [
+        {
+            "frm": "watchers",
+            "to": "investigator",
+            "kind": "forward",
+            "carried": carried(
+                ("anomalies", len(run.get("anomalies") or [])),
+                ("evidence queries", len(ev)),
+                ("provenance rows", len(run.get("provenance") or [])),
+            ),
+        },
+        {
+            "frm": "investigator",
+            "to": "skeptic",
+            "kind": "forward",
+            "carried": carried(("hypotheses", len(hyps)), ("cited claims", len(claims))),
+        },
+        {
+            "frm": "skeptic",
+            "to": "investigator",
+            "kind": "loop",
+            "fired": run.get("revise_rounds", 0),
+            "carried": carried(("links sent back to argue again", run.get("revise_rounds", 0))),
+        },
+        {
+            "frm": "skeptic",
+            "to": "exposure",
+            "kind": "forward",
+            "carried": carried(
+                ("links supported", sum(1 for h in hyps if h.get("status") == "supported")),
+                ("links not supported", sum(1 for h in hyps if h.get("status") == "not_supported")),
+                ("counter-checks run", sum(len(h.get("evidence") or []) for h in hyps)),
+            ),
+        },
+        {
+            "frm": "exposure",
+            "to": "playbook",
+            "kind": "forward",
+            "carried": carried(
+                ("exposed policies", exp.get("policies")),
+                ("sum insured EUR", exp.get("sum_insured_eur")),
+            ),
+        },
+        {
+            "frm": "playbook",
+            "to": "judge",
+            "kind": "forward",
+            "carried": carried(
+                ("actions drafted", len(actions)),
+                ("claims to score", len(claims)),
+            ),
+        },
+        {
+            "frm": "judge",
+            "to": "playbook",
+            "kind": "loop",
+            "fired": run.get("repair_rounds", 0),
+            "carried": carried(("repair rounds asked for", run.get("repair_rounds", 0))),
+        },
+        {
+            "frm": "judge",
+            "to": "hitl",
+            "kind": "forward",
+            "carried": carried(
+                (
+                    "overall",
+                    None if summary.get("overall") is None else f"{summary['overall']:.2f}",
+                ),
+                ("claims flagged", len(summary.get("flagged_claim_ids") or [])),
+                ("outbound awaiting a decision", sum(1 for a in actions if a.get("outbound"))),
+            ),
+        },
+        {
+            "frm": "hitl",
+            "to": "released",
+            "kind": "forward",
+            "carried": carried(
+                ("decision", ap.get("decision") or "none yet"),
+                ("actions released", sum(1 for a in actions if a.get("released"))),
+            ),
+        },
+    ]
+    # A back edge that never fired is noise on a diagram, not information.
+    return [h for h in out if h["kind"] == "forward" or h.get("fired")]
+
+
 def data_path(run: dict) -> dict[str, Any]:
     """Which data path this run actually used. Not which one is configured."""
     ev = _evidence(run)
@@ -487,6 +592,11 @@ def report(run: dict | None) -> dict[str, Any]:
         "run_id": run.get("run_id"),
         "event_id": run.get("event_id"),
         "steps": steps,
+        "handoffs": handoffs(run),
+        "loops": {
+            "revise_rounds": run.get("revise_rounds", 0),
+            "repair_rounds": run.get("repair_rounds", 0),
+        },
         "data_path": data_path(run),
         "verified": sum(1 for s in steps if s["status"] == "verified"),
         "of": len(steps),
