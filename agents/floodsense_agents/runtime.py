@@ -96,6 +96,13 @@ class Runtime:
         out["status"] = "awaiting_approval" if paused else v.get("status", "running")
         out["served_from"] = v.get("served_from", "live")
         out["cached_at"] = v.get("cached_at")
+        # Queries that errored. An answer resting on one of these is standing
+        # on a hole, and the reviewer has to be told before deciding.
+        out["failures"] = [
+            {"query_id": q, "view": e.get("view"), "error": e.get("error")}
+            for q, e in (out.get("evidence") or {}).items()
+            if e.get("error")
+        ]
         return out
 
     def approval(self, run_id: str) -> dict[str, Any]:

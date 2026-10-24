@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+from floodsense_agents import labelling
 from floodsense_agents.events import EVENTS
 from floodsense_agents.governance import DEFINITIONS
 from floodsense_agents.zetaris import now_utc
@@ -71,6 +72,14 @@ def events(past: list[dict]) -> list[dict[str, Any]]:
                 "approval": (row or {}).get("approval"),
                 "judge_overall": (row or {}).get("judge_overall"),
                 "updated_at": (row or {}).get("updated_at"),
+                # A row describes an answer computed earlier, never a live one.
+                "label": labelling.label(
+                    labelling.CACHE if row else None,
+                    (row or {}).get("created_at"),
+                    (row or {}).get("run_id"),
+                )
+                if row
+                else None,
             }
         )
     return out

@@ -21,6 +21,13 @@ class EventSpec:
         str, ...
     ]  # point_ids in hazard_timeline / discharge_daily that carry discharge
     rain_points: tuple[str, ...]  # point_ids that carry rain
+    # (lat_min, lat_max, lon_min, lon_max). exposure_join has no event column,
+    # so this is what keeps one event's footprint off another's portfolio.
+    bbox: tuple[float, float, float, float]
+    # When Copernicus first published the mapping. A replay before this cannot
+    # use the footprint, because nobody had it yet. Proposed: confirm against
+    # the activation record.
+    footprint_published_utc: str
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -37,6 +44,8 @@ EVENTS: dict[str, EventSpec] = {
         "Poyo ravine catchment",
         ("poyo-ribaroja",),
         ("chiva", "turis"),
+        (38.90, 39.70, -1.10, -0.20),
+        "2024-10-30T00:00:00Z",
     ),
     "EMSR517": EventSpec(
         "EMSR517",
@@ -48,6 +57,8 @@ EVENTS: dict[str, EventSpec] = {
         "Ahr catchment (Eifel)",
         ("altenahr",),
         ("ahrweiler",),
+        (50.20, 50.70, 6.60, 7.40),
+        "2021-07-15T00:00:00Z",
     ),
 }
 ALIASES = {"valencia_2024": "EMSR773", "ahr_2021": "EMSR517"}

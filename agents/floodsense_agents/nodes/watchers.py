@@ -10,14 +10,22 @@ from __future__ import annotations
 import time
 
 from floodsense_agents.governance import DEFINITIONS
-from floodsense_agents.models import Anomaly
+from floodsense_agents.models import UTC_TS, Anomaly
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, add_evidence, trace
 
 
 def window(state: FloodState) -> tuple[str, str]:
+    """The event window, cut at the replay clock.
+
+    The clock is re-checked here because these values are interpolated into
+    SQL predicates, and state can be resumed from a checkpoint written by an
+    older build.
+    """
     ev = state["event"]
     end = state.get("replay_ts") or ev["window_to_utc"]
+    if not UTC_TS.match(str(end)):
+        raise ValueError(f"replay_ts is not a UTC instant: {end!r}")
     return ev["window_from_utc"], min(end, ev["window_to_utc"])
 
 

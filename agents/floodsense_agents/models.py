@@ -16,9 +16,10 @@ The Zetaris view column names are still a proposal; see zetaris.py.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Layer = Literal["a", "b", "c"]
 Grounding = Literal["supported", "partial", "unsupported"]
@@ -179,6 +180,11 @@ class TraceEvent(BaseModel):
     evidence_ids: list[str] = Field(default_factory=list)
 
 
+# A replay clock is a UTC instant and nothing else. It ends up inside SQL
+# predicates, so it is checked here rather than trusted downstream.
+UTC_TS = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2})?Z?$")
+
+
 class RunRequest(BaseModel):
     question: str
     event_id: str = "EMSR773"  # Copernicus activation; EMSR773 Valencia 2024, EMSR517 Ahr 2021
@@ -188,3 +194,12 @@ class RunRequest(BaseModel):
     )
     lang: str = "en"
     reviewer: str | None = None
+
+    @field_validator("replay_ts")
+    @classmethod
+    def _utc_instant(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not UTC_TS.match(v):
+            raise ValueError("replay_ts must be a UTC instant such as 2024-10-29T16:00:00Z")
+        return v

@@ -40,6 +40,8 @@ def approval_payload(state: FloodState) -> dict[str, Any]:
         "judge": state.get("judge", []),
         "judge_summary": state.get("judge_summary"),
         "flagged_claim_ids": (state.get("judge_summary") or {}).get("flagged_claim_ids", []),
+        # Queries that failed. The reviewer decides knowing what is missing.
+        "failures": state.get("failures", []),
         "served_from": state.get("served_from", "live"),
         "cached_at": state.get("cached_at"),
         "model_ids": state.get("model_ids", []),

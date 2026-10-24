@@ -13,23 +13,46 @@ import time
 from floodsense_agents.models import Claim, ExposedAsset, Exposure, Hypothesis
 from floodsense_agents.nodes.investigator import cite
 from floodsense_agents.settings import settings
-from floodsense_agents.state import Deps, FloodState, add_evidence, trace
+from floodsense_agents.state import Deps, FloodState, add_evidence, answered, trace
 
 
 def make(deps: Deps):
     def exposure(state: FloodState) -> dict:
         t = time.time()
         s = settings.schema
-        q = deps.zetaris.run_sql(
-            f"SELECT policy_id, site_id, lat, lon, segment, sum_insured_eur FROM {s}.exposure_join "
-            f"WHERE in_footprint = 1 ORDER BY sum_insured_eur DESC"
+        ev = state["event"]
+        # in_footprint alone is portfolio-wide: an Ahr run read the Valencia
+        # sites. Scope to where this event actually is.
+        lat0, lat1, lon0, lon1 = ev["bbox"]
+        here = (
+            f"in_footprint = 1 AND lat BETWEEN {lat0} AND {lat1} AND lon BETWEEN {lon0} AND {lon1}"
         )
-        agg = deps.zetaris.run_sql(
-            f"SELECT segment, COUNT(*) AS policies, SUM(sum_insured_eur) AS sum_insured_eur FROM "
-            f"{s}.exposure_join WHERE in_footprint = 1 "
-            f"GROUP BY segment ORDER BY sum_insured_eur DESC"
-        )
-        assets = [ExposedAsset(**r) for r in q.rows_sample]
+        published = ev["footprint_published_utc"]
+        clock = state.get("replay_ts")
+        # The mapping is a published product. Before it existed, nobody could
+        # have acted on it, so a replay before that moment must not use it.
+        have_footprint = not clock or clock >= published
+        if not have_footprint:
+            q = deps.zetaris.run_sql(
+                f"SELECT policy_id, site_id, lat, lon, segment, sum_insured_eur "
+                f"FROM {s}.exposure_join WHERE 1 = 0"
+            )
+            agg = q
+        else:
+            q = deps.zetaris.run_sql(
+                f"SELECT policy_id, site_id, lat, lon, segment, sum_insured_eur "
+                f"FROM {s}.exposure_join WHERE {here} ORDER BY sum_insured_eur DESC"
+            )
+            agg = deps.zetaris.run_sql(
+                f"SELECT segment, COUNT(*) AS policies, SUM(sum_insured_eur) AS sum_insured_eur "
+                f"FROM {s}.exposure_join WHERE {here} "
+                f"GROUP BY segment ORDER BY sum_insured_eur DESC"
+            )
+        # A query that errored returned nothing because it failed, not because
+        # the portfolio is empty. Saying "no site is exposed" would be as wrong
+        # as naming seven.
+        ok = answered(q, agg)
+        assets = [ExposedAsset(**r) for r in q.rows_sample] if ok else []
         total = sum(a.sum_insured_eur or 0 for a in assets)
         exp = Exposure(
             assets=assets,
@@ -76,6 +99,20 @@ def make(deps: Deps):
                 )
                 new_ids.append(cid)
         hyps = [Hypothesis(**h) for h in state["hypotheses"] if h["id"] != "H4"]
+        if not have_footprint:
+            statement = "The footprint is not published yet at this replay time"
+            rationale = (
+                f"{ev['event_id']} mapping published {published}; this replay stands at {clock}"
+            )
+        elif not ok:
+            statement = "Exposure is unknown: the portfolio query failed"
+            rationale = f"exposure_join query failed: {(q.error or agg.error or '')[:160]}"
+        elif assets:
+            statement = f"{len(assets)} insured sites are exposed"
+            rationale = "deterministic join on exposure_join.in_footprint = 1"
+        else:
+            statement = "No insured site in the footprint"
+            rationale = "deterministic join on exposure_join.in_footprint = 1"
         hyps.append(
             Hypothesis(
                 id="H4",
@@ -84,10 +121,8 @@ def make(deps: Deps):
                 status="supported" if assets else "not_supported",
                 rounds=0,
                 evidence=[q.query_id],
-                statement=f"{len(assets)} insured sites are exposed"
-                if assets
-                else "No insured site in the footprint",
-                rationale="deterministic join on exposure_join.in_footprint = 1",
+                statement=statement,
+                rationale=rationale,
             )
         )
         return {
@@ -99,7 +134,11 @@ def make(deps: Deps):
                 state,
                 "exposure",
                 f"{len(assets)} exposed policies, {total:,.0f} EUR sum insured, {len(new_ids)} new "
-                f"number claims",
+                f"number claims"
+                if ok
+                else "exposure not computed: the portfolio query failed"
+                if ok
+                else f"footprint not published until {published}",
                 lane="sql",
                 started=t,
                 evidence_ids=[q.query_id, agg.query_id],

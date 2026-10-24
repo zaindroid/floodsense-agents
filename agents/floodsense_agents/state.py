@@ -99,6 +99,20 @@ def trace(
     return [*prev, ev.model_dump()]
 
 
+def answered(*items: Evidence) -> bool:
+    """True when every query came back. An errored query answered nothing.
+
+    Empty rows and a failed call look identical downstream unless someone
+    asks. Nodes ask here before stating anything.
+    """
+    return all(e.error is None for e in items)
+
+
+def failures(state: FloodState) -> list[str]:
+    """Query ids in this run that errored. Empty is the healthy case."""
+    return sorted(q for q, e in (state.get("evidence") or {}).items() if e.get("error"))
+
+
 def add_evidence(state: FloodState, *items: Evidence) -> dict[str, dict[str, Any]]:
     ev = dict(state.get("evidence", {}))
     for e in items:

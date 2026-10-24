@@ -94,7 +94,11 @@ async function desk() {
           '</span><span class="case-figs">' +
           (ev.run_id ? "case open" : "not opened") +
           "<span>" +
-          (ev.updated_at ? esc(ev.updated_at.slice(0, 16).replace("T", " ")) : "—") +
+          (ev.label && !ev.label.live
+            ? esc(ev.label.kind) + " " + esc(ev.label.at || "")
+            : ev.updated_at
+              ? esc(ev.updated_at.slice(0, 16).replace("T", " "))
+              : "—") +
           "</span></span>" +
           pill +
           "</button>"
@@ -129,6 +133,7 @@ function drawCase(eventId) {
   const ap = run.approval || {};
   const decided = ap.status && ap.status !== "awaiting";
   screen.innerHTML =
+    holes(run) +
     stale(run) +
     '<h1 class="verdict">' +
     (figures.policies
@@ -407,6 +412,24 @@ const stale = (body) =>
   body && body.label && body.label.live === false
     ? '<p class="stale">' + esc(body.label.text) + "</p>"
     : "";
+
+// A query that failed means the answer above it is standing on a hole. The
+// reviewer decides knowing that, or not at all.
+const holes = (run) => {
+  const f = (run && run.failures) || [];
+  if (!f.length) return "";
+  const views = [...new Set(f.map((x) => x.view || "a view"))].join(", ");
+  return (
+    '<p class="broken"><b>' +
+    f.length +
+    (f.length === 1 ? " query failed" : " queries failed") +
+    " (" +
+    esc(views) +
+    "). </b>Anything below is missing whatever those queries would have returned. " +
+    esc(f[0].error || "") +
+    "</p>"
+  );
+};
 
 /* Record --------------------------------------------------------------------- */
 

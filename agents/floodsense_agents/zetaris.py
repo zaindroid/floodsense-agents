@@ -35,6 +35,30 @@ from floodsense_agents.settings import settings
 
 log = logging.getLogger("floodsense.zetaris")
 _SELECT_ONLY = re.compile(r"^\s*(select|with)\b", re.I)
+# Starting with SELECT or WITH is not enough: a WITH that then mutates got
+# past the old guard and emptied a table on the fake. Refuse anything that
+# could write, and anything carrying a second statement.
+_FORBIDDEN = re.compile(
+    r"\b(insert|update|delete|drop|alter|create|replace|truncate|attach|detach|"
+    r"pragma|vacuum|grant|revoke|reindex|begin|commit|rollback)\b",
+    re.I,
+)
+
+
+def check_sql(sql: str) -> str:
+    """The one place that decides whether the agents may run a statement."""
+    text = (sql or "").strip()
+    while text.endswith(";"):
+        text = text[:-1].strip()
+    if not _SELECT_ONLY.match(text):
+        raise ValueError("agents may only run SELECT / WITH statements")
+    if ";" in text:
+        raise ValueError("one statement per query; ';' is not allowed")
+    if _FORBIDDEN.search(text):
+        raise ValueError("agents may only read; this statement could write")
+    return text
+
+
 _VIEW = re.compile(r"\b(?:from|join)\s+([A-Za-z_][\w.]*)", re.I)
 
 
@@ -70,8 +94,7 @@ class ZetarisClient:
         return self._token
 
     def run_sql(self, sql: str) -> Evidence:
-        if not _SELECT_ONLY.match(sql):
-            raise ValueError("agents may only run SELECT / WITH statements")
+        sql = check_sql(sql)
         qid = str(uuid.uuid4())
         body = {
             "queryId": qid,
@@ -270,8 +293,7 @@ class FakeZetaris:
         self._conn.commit()
 
     def run_sql(self, sql: str) -> Evidence:
-        if not _SELECT_ONLY.match(sql):
-            raise ValueError("agents may only run SELECT / WITH statements")
+        sql = check_sql(sql)
         qid = str(uuid.uuid4())
         try:
             with self._lock:
