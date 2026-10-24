@@ -8,11 +8,26 @@ for layer (b) citations. No model call.
 from __future__ import annotations
 
 import time
+from datetime import datetime, timedelta
 
 from floodsense_agents.governance import DEFINITIONS
 from floodsense_agents.models import UTC_TS, Anomaly
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, add_evidence, trace
+
+
+def last_complete_day(end_utc: str) -> str:
+    """The last date whose daily aggregate is actually known at end_utc.
+
+    S2: discharge_daily was filtered with end[:10], so a replay standing at
+    noon read that whole day's total, which nobody had yet. A daily value is
+    known once the day is over.
+    """
+    date, _, clock = end_utc.partition("T")
+    if clock.rstrip("Z") >= "23:59":
+        return date
+    day = datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)
+    return day.strftime("%Y-%m-%d")
 
 
 def window(state: FloodState) -> tuple[str, str]:

@@ -18,6 +18,7 @@ from floodsense_agents.models import Claim, Evidence, PlaybookAction
 from floodsense_agents.nightshift import parse_json
 from floodsense_agents.nodes.investigator import numbers_in
 from floodsense_agents.prompts import PLAYBOOK, REPAIR, rows_block
+from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, trace
 
 log = logging.getLogger("floodsense.playbook")
@@ -78,9 +79,13 @@ def make(deps: Deps):
     def playbook(state: FloodState) -> dict:
         t = time.time()
         js_sum = state.get("judge_summary") or {}
-        if (
-            js_sum.get("flagged_claim_ids") and state.get("repair_rounds", 0) < 1
-        ):  # repair edge from the Judge
+        # S6: this used to stop at 1 while the Judge routed back while
+        # repair_rounds < JUDGE_REPAIR_ROUNDS. With the knob at 2 the two
+        # disagreed and the graph hit its recursion limit. One bound, read
+        # from the same setting.
+        if js_sum.get("flagged_claim_ids") and (
+            state.get("repair_rounds", 0) < settings.judge_repair_rounds
+        ):
             return _repair(state, deps, t)
         actions = _deterministic(state)
         model_id = "deterministic"

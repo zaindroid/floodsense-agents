@@ -26,7 +26,7 @@ GET  /runs/{id}                    snapshot: contract state + claims, evidence, 
 GET  /runs/{id}/approval           what the reviewer sees (409 unless awaiting approval)
 POST /runs/{id}/approval           ApprovalDecision {action: approve|edit|reject, edits?, reviewer_note?, reviewer?} -> resumes the run
 GET  /runs/{id}/citations          every citation record of the run plus the evidence and provenance they point at
-GET  /runs/{id}/events             SSE: TraceEvent json per `trace` event as they happen, then one `status` event
+GET  /runs/{id}/events             SSE: the run's trace replayed in order, then one `status` event. POST /runs finishes the graph first, so this is not a live feed yet
 
     python -m floodsense_agents            # host: http://127.0.0.1:8100
 """

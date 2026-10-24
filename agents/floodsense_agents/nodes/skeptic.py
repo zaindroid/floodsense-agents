@@ -14,7 +14,7 @@ import time
 from floodsense_agents.governance import DEFINITIONS
 from floodsense_agents.models import Evidence, Hypothesis
 from floodsense_agents.nightshift import parse_json
-from floodsense_agents.nodes.watchers import window
+from floodsense_agents.nodes.watchers import last_complete_day, window
 from floodsense_agents.prompts import SKEPTIC, rows_block
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, add_evidence, trace
@@ -64,7 +64,7 @@ def _checks_for(h: Hypothesis, state: FloodState) -> list[tuple[str, str]]:
                 "daily discharge confirms the rise",
                 f"SELECT MAX(discharge_m3s) AS mx, MIN(discharge_m3s) AS mn FROM "
                 f"{s}.discharge_daily WHERE point_id IN ({river_pts}) AND date BETWEEN '{t0[:10]}' "
-                f"AND '{t1[:10]}' HAVING MAX(discharge_m3s) >= 10 * MIN(discharge_m3s)",
+                f"AND '{last_complete_day(t1)}' HAVING MAX(discharge_m3s) >= 10 * MIN(discharge_m3s)",
             ),
             (
                 "a warning was issued for the river point",

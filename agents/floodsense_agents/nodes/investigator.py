@@ -17,13 +17,19 @@ import time
 
 from floodsense_agents.models import Citation, Claim, Evidence, Hypothesis
 from floodsense_agents.nightshift import parse_json
-from floodsense_agents.nodes.watchers import window
+from floodsense_agents.nodes.watchers import last_complete_day, window
 from floodsense_agents.prompts import INVESTIGATOR, rows_block
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, add_evidence, trace
 
 log = logging.getLogger("floodsense.investigator")
-_NUM = re.compile(r"-?\d+(?:[.,]\d+)?")
+# 21,600,000 is one number, not 21.6 and 0, and the 3 in "m3/s" is not a
+# number at all. The Judge checks whatever comes out of here against the
+# cited rows, so a bad split becomes a false mismatch.
+_NUM = re.compile(
+    r"(?<![A-Za-z\d.,])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?"  # grouped thousands
+    r"|(?<![A-Za-z\d.,])-?\d+(?:\.\d+)?"  # plain, including decimals
+)
 LINKS = ("rain->catchment", "catchment->river", "river->site", "site->exposure")
 
 
@@ -33,7 +39,7 @@ def numbers_in(text: str) -> list[float]:
         re.sub(r"\d{4}-\d{2}-\d{2}T?[\d:]*Z?", " ", text)
     ):  # timestamps are not numbers to check
         try:
-            out.append(float(n.replace(",", ".")))
+            out.append(float(n.replace(",", "")))
         except ValueError:
             pass
     return out
@@ -95,7 +101,7 @@ def _deterministic(
     daily = deps.zetaris.run_sql(
         f"SELECT point_id, date, discharge_m3s, source FROM {s}.discharge_daily WHERE point_id IN "
         f"({river_pts}) "
-        f"AND date BETWEEN '{t0[:10]}' AND '{t1[:10]}' ORDER BY date"
+        f"AND date BETWEEN '{t0[:10]}' AND '{last_complete_day(t1)}' ORDER BY date"
     )
     foot = deps.zetaris.run_sql(
         f"SELECT COUNT(*) AS sites_in_footprint, COUNT(DISTINCT segment) AS segments FROM "

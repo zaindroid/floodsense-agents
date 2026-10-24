@@ -16,6 +16,7 @@ from floodsense_agents.checkpoints import build_checkpointer
 from floodsense_agents.events import spec
 from floodsense_agents.graph import build_deps, build_graph
 from floodsense_agents.hitl import approval_payload
+from floodsense_agents.settings import settings
 from floodsense_agents.models import ApprovalDecision, RunRequest
 from floodsense_agents.zetaris import now_utc
 
@@ -175,7 +176,9 @@ class Runtime:
             raise NotAwaitingApproval(f"run {run_id} is {s['status']}, not awaiting approval")
         self.graph.invoke(Command(resume=decision.model_dump()), self.cfg(run_id))
         out = self.snapshot(run_id)
-        if out["status"] == "approved" and self.deps is not None:
+        # N1: store ran on every approval, FF_HMEM or not. NoMemory made that
+        # a no-op; a real memory would have written behind a flag that is off.
+        if out["status"] == "approved" and self.deps is not None and settings.ff_hmem:
             try:
                 self.deps.memory.store(run_id, out["request"], out["claims"], out["approval"])
             except Exception as e:
@@ -183,5 +186,37 @@ class Runtime:
         self._index_row(run_id)
         return out
 
+    def _rebuild_index(self) -> bool:
+        """Re-read the checkpointer so a restart does not lose the run list.
+
+        S10: the index is process memory while the state is not. After a
+        restart a run stayed reachable by id and vanished from /runs/past.
+        Returns False when the checkpointer cannot be listed, so the caller
+        can say the list is this process only rather than imply it is whole.
+        """
+        saver = getattr(self.graph, "checkpointer", None)
+        if saver is None or not hasattr(saver, "list"):
+            return False
+        try:
+            seen = set()
+            for item in saver.list(None):
+                thread = (getattr(item, "config", None) or {}).get("configurable", {})
+                run_id = thread.get("thread_id")
+                if not run_id or run_id in seen or run_id in self.index:
+                    continue
+                seen.add(run_id)
+                try:
+                    self._index_row(run_id)
+                except Exception:  # noqa: BLE001 - a partial checkpoint is not fatal
+                    continue
+            return True
+        except Exception as e:  # noqa: BLE001 - listing is best effort
+            log.warning("could not read past runs from the checkpointer: %s", str(e)[:120])
+            return False
+
     def past(self, limit: int = 50) -> list[dict[str, Any]]:
-        return sorted(self.index.values(), key=lambda r: r["updated_at"], reverse=True)[:limit]
+        whole = self._rebuild_index()
+        rows = sorted(self.index.values(), key=lambda r: r["updated_at"], reverse=True)[:limit]
+        for r in rows:
+            r["scope"] = "all runs on this checkpointer" if whole else "this process only"
+        return rows

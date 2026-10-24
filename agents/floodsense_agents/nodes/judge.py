@@ -153,7 +153,11 @@ def evaluate(
         else 1.0
     )
     overall = round(sum(s.score for s in scores) / n, 3)
-    flagged = [s.claim_id for s in scores if s.grounding == "unsupported"]
+    # S5: licence_ok was computed per claim and then left out of the flag
+    # set, so a claim quoting too much from a pointer-only source passed
+    # review silently. The score formula is unchanged, so earlier eval
+    # numbers stay comparable; what changes is that it gets flagged.
+    flagged = [s.claim_id for s in scores if s.grounding == "unsupported" or not s.licence_ok]
     model_ids = {s.model_id for s in scores}
     return scores, JudgeSummary(
         overall=overall,

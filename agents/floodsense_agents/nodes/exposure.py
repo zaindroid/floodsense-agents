@@ -37,7 +37,7 @@ def make(deps: Deps):
                 f"SELECT policy_id, site_id, lat, lon, segment, sum_insured_eur "
                 f"FROM {s}.exposure_join WHERE 1 = 0"
             )
-            agg = q
+            agg = whole = q
         else:
             q = deps.zetaris.run_sql(
                 f"SELECT policy_id, site_id, lat, lon, segment, sum_insured_eur "
@@ -48,18 +48,27 @@ def make(deps: Deps):
                 f"FROM {s}.exposure_join WHERE {here} "
                 f"GROUP BY segment ORDER BY sum_insured_eur DESC"
             )
+            # run_sql keeps 20 rows. The seed has 7, so summing the sample
+            # looked right; a real portfolio would state a partial total that
+            # the Judge could still match. Take the totals from the aggregate.
+            whole = deps.zetaris.run_sql(
+                f"SELECT COUNT(*) AS policies, SUM(sum_insured_eur) AS sum_insured_eur "
+                f"FROM {s}.exposure_join WHERE {here}"
+            )
         # A query that errored returned nothing because it failed, not because
         # the portfolio is empty. Saying "no site is exposed" would be as wrong
         # as naming seven.
-        ok = answered(q, agg)
+        ok = answered(q, agg, whole)
         assets = [ExposedAsset(**r) for r in q.rows_sample] if ok else []
-        total = sum(a.sum_insured_eur or 0 for a in assets)
+        row = (whole.rows_sample or [{}])[0] if ok else {}
+        policies = int(row.get("policies") or 0)
+        total = float(row.get("sum_insured_eur") or 0)
         exp = Exposure(
             assets=assets,
-            policies=q.row_count,
+            policies=policies,
             sum_insured_eur=total,
             by_segment=agg.rows_sample,
-            query_ids=[q.query_id, agg.query_id],
+            query_ids=[q.query_id, agg.query_id, whole.query_id],
         )
 
         claims = [Claim(**c) for c in state["claims"]]
@@ -74,9 +83,9 @@ def make(deps: Deps):
                     claim_id=cid,
                     kind="number",
                     hypothesis_id="H4",
-                    citations=cite(cid, q, prov, 1),
-                    numbers=[q.row_count, total],
-                    text=f"{q.row_count} policies sit inside the mapped footprint, sum insured "
+                    citations=cite(cid, whole, prov, 1),
+                    numbers=[policies, total],
+                    text=f"{policies} policies sit inside the mapped footprint, sum insured "
                     f"{total:,.0f} EUR; the largest is {assets[0].policy_id} "
                     f"({assets[0].segment}, {assets[0].sum_insured_eur:,.0f} EUR).",
                 )
@@ -129,11 +138,11 @@ def make(deps: Deps):
             "exposure": exp.model_dump(),
             "claims": [c.model_dump() for c in claims],
             "hypotheses": [h.model_dump() for h in hyps],
-            "evidence": add_evidence(state, q, agg),
+            "evidence": add_evidence(state, q, agg, whole),
             "trace": trace(
                 state,
                 "exposure",
-                f"{len(assets)} exposed policies, {total:,.0f} EUR sum insured, {len(new_ids)} new "
+                f"{policies} exposed policies, {total:,.0f} EUR sum insured, {len(new_ids)} new "
                 f"number claims"
                 if ok
                 else "exposure not computed: the portfolio query failed"
@@ -141,7 +150,7 @@ def make(deps: Deps):
                 else f"footprint not published until {published}",
                 lane="sql",
                 started=t,
-                evidence_ids=[q.query_id, agg.query_id],
+                evidence_ids=[q.query_id, agg.query_id, whole.query_id],
             ),
         }
 

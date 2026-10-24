@@ -81,7 +81,11 @@ def hitl(state: FloodState) -> dict:
                 f"({decision.reviewer_note or 'no note'})",
             ),
         }
-    edited = decision.action == "edit" and bool((decision.edits or "").strip())
+    # N2: an edit with no text used to fall through to "approved". The API
+    # rejects it at 422, but a graph resumed directly reached here.
+    if decision.action == "edit" and not (decision.edits or "").strip():
+        raise ValueError("an edit needs replacement text; send reject to hold instead")
+    edited = decision.action == "edit"
     approval = Approval(
         status="auto" if auto else ("edited" if edited else "approved"),
         decision=decision.action,
