@@ -76,7 +76,7 @@ APP_DIR = _ui("app")
 MOCK_DIR = _ui("mock")
 # The desk asks the graph the same thing every time; the operator picks the
 # event, not the wording.
-_DESK_QUESTION = "Which of our sites are at risk, and why?"
+_DESK_QUESTION = desk.DESK_QUESTION
 _rt: Runtime | None = None
 
 
@@ -195,7 +195,10 @@ def desk_events():
 def desk_event(event_id: str):
     """The case for one event. Starts it if nobody has yet."""
     rt = runtime()
-    row = next((r for r in rt.past() if r.get("event_id") == event_id), None)
+    row = next(
+        (r for r in rt.past() if r.get("event_id") == event_id and desk.is_case(r)),
+        None,
+    )
     if row is not None:
         run = _stored(row["run_id"])
     else:

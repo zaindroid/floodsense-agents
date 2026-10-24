@@ -32,6 +32,10 @@
 .vfy-x{font:inherit;font-size:14px;background:none;border:0;border-bottom:1px solid var(--rule,#dcdcd6);
   color:var(--soft,#5c636c);padding:0;cursor:pointer}
 .vfy-x:hover{color:var(--ink,#1b1f24);border-bottom-color:var(--ink,#1b1f24)}
+.vfy-meter{height:2px;margin:0;background:var(--rule,#dcdcd6);position:relative}
+.vfy-meter i{position:absolute;top:0;bottom:0;left:0;background:var(--go,#40674f);
+  transform-origin:left;animation:vfyDraw .85s cubic-bezier(.2,.7,.3,1) .1s both}
+.vfy-meter i.short{background:var(--hold,#9a6b1f)}
 .vfy-path{margin:18px 24px 0;padding:12px 14px;border-left:3px solid var(--go,#40674f);
   background:var(--wash,#f2f2ee);font-size:14px;line-height:1.5}
 .vfy-path.off{border-left-color:var(--hold,#9a6b1f)}
@@ -43,8 +47,13 @@
 .vfy-body{display:grid;grid-template-columns:minmax(0,240px) minmax(0,1fr);gap:0 28px;padding:18px 24px 24px}
 .vfy-pipe{list-style:none;margin:0;padding:0}
 .vfy-pipe li{margin:0}
-.vfy-hand{display:block;width:100%;text-align:left;font:inherit;background:none;border:0;
-  border-left:1px solid var(--rule,#dcdcd6);margin-left:13px;padding:5px 0 5px 14px;cursor:pointer}
+.vfy-hand{display:block;position:relative;width:100%;text-align:left;font:inherit;background:none;
+  border:0;border-left:1px solid var(--rule,#dcdcd6);margin-left:13px;padding:5px 0 5px 14px;
+  cursor:pointer}
+/* What crossed, travelling the edge it crossed. Runs once, with the marks. */
+.vfy-hand::after{content:"";position:absolute;left:-2px;width:3px;height:3px;border-radius:50%;
+  background:var(--go,#40674f);animation:vfyRun .55s linear both;animation-delay:var(--d)}
+.vfy-hand.loop::after{background:var(--hold,#9a6b1f)}
 .vfy-hand:hover .vfy-carry{color:var(--ink,#1b1f24)}
 .vfy-carry{font-size:11.5px;color:var(--soft,#5c636c);line-height:1.4;display:block}
 .vfy-hand[aria-current=true] .vfy-carry{color:var(--ink,#1b1f24);font-weight:500}
@@ -58,7 +67,8 @@
 .vfy-flowhead{font-size:11.5px;color:var(--soft,#5c636c);margin:0 0 8px}
 .vfy-agent{display:flex;align-items:center;gap:9px;width:100%;text-align:left;font:inherit;
   cursor:pointer;border:1px solid var(--rule,#dcdcd6);border-left-width:3px;
-  background:var(--wash,#f2f2ee);padding:9px 11px}
+  background:var(--wash,#f2f2ee);padding:9px 11px;
+  animation:vfyIn .28s cubic-bezier(.2,.7,.3,1) both;animation-delay:var(--d)}
 .vfy-agent:hover{background:#e9e9e3}
 .vfy-agent[aria-current=true]{background:#fff;border-color:var(--ink,#1b1f24);border-left-width:3px}
 .vfy-agent.verified{border-left-color:var(--go,#40674f)}
@@ -66,6 +76,8 @@
 .vfy-agent.failed{border-left-color:var(--stop,#8c3b3b)}
 .vfy-agent\\.not{border-left-color:#b6b6b0}
 .vfy-agent.notreached{border-left-color:#b6b6b0}
+.vfy-ix{font-size:11px;color:var(--rule,#dcdcd6)}
+.vfy-agent[aria-current=true] .vfy-ix{color:var(--soft,#5c636c)}
 .vfy-nm{flex:1;font-size:14px}
 .vfy-ct{font-size:11.5px;color:var(--soft,#5c636c)}
 .vfy-agent.verified .vfy-ct{color:var(--go,#40674f)}
@@ -81,7 +93,8 @@
 .vfy-made dd{margin:0;font-size:18px;font-weight:500}
 .vfy-chk{display:grid;grid-template-columns:13px 1fr;gap:9px;padding:8px 0;
   border-top:1px solid var(--rule,#dcdcd6);align-items:start}
-.vfy-dot{width:9px;height:9px;margin-top:5px;border-radius:50%;border:1px solid var(--soft,#5c636c)}
+.vfy-dot{width:9px;height:9px;margin-top:5px;border-radius:50%;border:1px solid var(--soft,#5c636c);
+  animation:vfyIn .22s ease both;animation-delay:var(--d)}
 .vfy-dot.ok{background:var(--go,#40674f);border-color:var(--go,#40674f)}
 .vfy-dot.no{background:var(--stop,#8c3b3b);border-color:var(--stop,#8c3b3b)}
 .vfy-chk b{font-size:14px;font-weight:400;display:block}
@@ -96,6 +109,10 @@
 .vfy-q pre{margin:8px 0 2px;padding:8px 10px;background:var(--wash,#f2f2ee);font:inherit;
   font-size:12.5px;white-space:pre-wrap;color:var(--soft,#5c636c);line-height:1.5}
 .vfy-wait{border-left:2px solid var(--hold,#9a6b1f);padding:4px 0 4px 10px;margin:0 0 14px;font-size:13.5px;line-height:1.5;color:var(--soft,#5c636c);max-width:52ch}
+@keyframes vfyIn{from{opacity:0;transform:translateY(5px)}}
+@keyframes vfyDraw{from{transform:scaleX(0)}}
+@keyframes vfyRun{from{top:-3px;opacity:0}25%{opacity:1}to{top:100%;opacity:0}}
+@media (prefers-reduced-motion:reduce){.vfy *,.vfy-hand::after{animation-duration:1ms!important}}
 .vfy-msg{padding:28px 24px;font-size:15px;line-height:1.6;color:var(--soft,#5c636c);max-width:60ch}
 @media (max-width:820px){.vfy-body{grid-template-columns:1fr;gap:18px}}
 `;
@@ -125,6 +142,9 @@
   let data = null;
   let picked = 0;
   let shown = null;
+  // The rail lands step by step when the panel opens, and holds still
+  // afterwards: a redraw from a click is not news.
+  let fresh = false;
 
   function close() {
     scrim.hidden = true;
@@ -137,7 +157,8 @@
     if (e.key === "Escape" && !scrim.hidden) close();
   });
 
-  window.showWorking = async function (runId) {
+  // focus is an agent name: the chain on the case screen opens its own step.
+  window.showWorking = async function (runId, focus) {
     scrim.hidden = false;
     panel.focus();
     panel.innerHTML = '<div class="vfy-msg">Checking every step…</div>';
@@ -163,8 +184,10 @@
       (s) => s.status === "failed" || s.status === "partial"
     );
     const ran = data.steps.findIndex((s) => s.ran);
-    picked = broken !== -1 ? broken : ran !== -1 ? ran : 0;
+    const asked = focus ? data.steps.findIndex((s) => s.agent === focus) : -1;
+    picked = asked !== -1 ? asked : broken !== -1 ? broken : ran !== -1 ? ran : 0;
     shown = null;
+    fresh = true;
     draw();
   };
 
@@ -182,6 +205,7 @@
       " of " +
       data.checks_run +
       ' checks</span><button class="vfy-x">Close</button></div>' +
+      meterHtml() +
       pathHtml(p) +
       '<div class="vfy-body"><div><p class="vfy-flowhead">' +
       (data.loops && (data.loops.revise_rounds || data.loops.repair_rounds)
@@ -207,6 +231,23 @@
         shown = data.handoffs[Number(b.dataset.h)];
         draw();
       })
+    );
+    fresh = false;
+  }
+
+  function meterHtml() {
+    const all = data.checks_run || 0;
+    const share = all ? Math.round((data.checks_passed / all) * 100) : 0;
+    return (
+      '<div class="vfy-meter" role="img" aria-label="' +
+      data.checks_passed +
+      " of " +
+      all +
+      ' checks passed"><i class="' +
+      (share === 100 ? "" : "short") +
+      '" style="width:' +
+      share +
+      '%"></i></div>'
     );
   }
 
@@ -240,24 +281,29 @@
 
   function flowHtml() {
     const hands = data.handoffs || [];
+    let beat = 0;
+    const at = () => (fresh ? beat++ * 110 : 0);
     return data.steps
       .map((s, i) => {
+        const mine = agentHtml(s, i, at());
         const out = hands
           .map((h, hi) => [h, hi])
           .filter(([h]) => h.frm === s.agent)
-          .map(([h, hi]) => handRailHtml(h, hi))
+          .map(([h, hi]) => handRailHtml(h, hi, at()))
           .join("");
-        return "<li>" + agentHtml(s, i) + out + "</li>";
+        return "<li>" + mine + out + "</li>";
       })
       .join("");
   }
 
-  function handRailHtml(h, hi) {
+  function handRailHtml(h, hi, delay) {
     const n = data.handoffs.indexOf(h);
     return (
       '<button class="vfy-hand ' +
       (h.kind === "loop" ? "loop" : "") +
-      '" data-h="' +
+      '" style="--d:' +
+      delay +
+      'ms" data-h="' +
       (hi == null ? n : hi) +
       '" aria-current="' +
       (shown === h) +
@@ -302,21 +348,25 @@
     );
   }
 
-  function agentHtml(s, i) {
+  function agentHtml(s, i, delay) {
     const cls = s.status === "not reached" ? "notreached" : s.status;
     const n = s.checks.filter((c) => c.ok).length;
     return (
-      '<li><button class="vfy-agent ' +
+      '<button class="vfy-agent ' +
       cls +
-      '" data-i="' +
+      '" style="--d:' +
+      delay +
+      'ms" data-i="' +
       i +
       '" aria-current="' +
       (i === picked) +
-      '"><span class="vfy-nm">' +
+      '"><span class="vfy-ix">' +
+      String(i + 1).padStart(2, "0") +
+      '</span><span class="vfy-nm">' +
       esc(s.title || s.agent) +
       '</span><span class="vfy-ct">' +
       (s.ran ? n + "/" + s.checks.length : "—") +
-      "</span></button></li>"
+      "</span></button>"
     );
   }
 
@@ -365,10 +415,12 @@
           " checks pass</h3>" +
           s.checks
             .map(
-              (c) =>
+              (c, ci) =>
                 '<div class="vfy-chk"><span class="vfy-dot ' +
                 (c.ok ? "ok" : "no") +
-                '"></span><span><b>' +
+                '" style="--d:' +
+                ci * 45 +
+                'ms"></span><span><b>' +
                 esc(c.name) +
                 "</b><span>" +
                 esc(c.detail) +

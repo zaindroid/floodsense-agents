@@ -106,6 +106,7 @@ async function desk() {
       })
       .join("") +
     "</div>";
+  screen.className = "seq";
   screen.querySelectorAll(".case").forEach((b) =>
     b.addEventListener("click", () => {
       location.hash = "#/case/" + b.dataset.id;
@@ -143,6 +144,7 @@ function drawCase(eventId) {
       '<p class="note">Nothing was read and no model was called, so this cost ' +
       "one decision and no data.</p>" +
       askHtml(eventId);
+    screen.className = "seq";
     wireAsk(eventId);
     return;
   }
@@ -158,21 +160,31 @@ function drawCase(eventId) {
         " inside the flooded area."
       : "No insured site falls inside the flooded area.") +
     "</h1>" +
-    '<dl class="figs"><div><dd>' +
+    '<dl class="figs"><div><dd data-to="' +
+    (figures.sum_insured_eur || 0) +
+    '" data-fmt="eur">' +
     eur(figures.sum_insured_eur) +
     "</dd><dt>sum insured at risk</dt></div>" +
-    "<div><dd>" +
+    '<div><dd data-to="' +
+    figures.policies +
+    '">' +
     figures.policies +
     "</dd><dt>policies</dt></div>" +
-    "<div><dd>" +
+    '<div><dd data-to="' +
+    figures.actions +
+    '">' +
     figures.actions +
     "</dd><dt>actions drafted</dt></div>" +
-    "<div><dd>" +
+    '<div><dd data-to="' +
+    (figures.judge_overall == null ? "" : figures.judge_overall) +
+    '" data-fmt="two">' +
     (figures.judge_overall == null ? "—" : figures.judge_overall.toFixed(2)) +
     "</dd><dt>checked, over " +
     (run.claims || []).length +
     " claims</dt></div></dl>" +
-    '<h2 class="sec">What to do</h2><ol class="acts">' +
+    '<section class="area"><h2 class="sec">The chain that produced this</h2>' +
+    '<div id="flow"><p class="note">Checking every step\u2026</p></div></section>' +
+    '<section class="area"><h2 class="sec">What to do</h2><ol class="acts">' +
     (run.playbook || [])
       .map(
         (a) =>
@@ -189,21 +201,116 @@ function drawCase(eventId) {
       .join("") +
     "</ol>" +
     (decided ? signedHtml(ap, figures) : decideHtml()) +
+    "</section>" +
     (released ? artifactsHtml(run) : "") +
     workingHtml(run) +
-    '<p class="note"><button class="ghost" id="stepwise">' +
-    "Check every agent step</button></p>" +
-    '<h2 class="sec" style="margin-top:26px">What was knowable, and when</h2>' +
-    '<div id="timeline"><p class="note">Replaying the event\u2026</p></div>' +
+    '<section class="area"><h2 class="sec">What was knowable, and when</h2>' +
+    '<div id="timeline"><p class="note">Replaying the event\u2026</p></div></section>' +
     askHtml(eventId);
+  screen.className = "seq";
 
   if (!decided) wireDecide(eventId);
   if (released) wireArtifacts(eventId, run);
-  document.getElementById("stepwise").addEventListener("click", () => {
-    window.showWorking(run.run_id);
-  });
   wireAsk(eventId);
+  countUp();
+  drawFlow(run.run_id);
   drawTimeline(eventId);
+}
+
+/* The chain --------------------------------------------------------------- */
+
+// Drawn from what the service verified, not from the graph's shape: a step
+// that never ran says so instead of showing a tick. The marks land in order,
+// so the chain reads the way the run went.
+const nodeClass = (s) =>
+  s.status === "verified"
+    ? "verified"
+    : s.status === "partial"
+      ? "partial"
+      : s.status === "failed"
+        ? "failed"
+        : s.agent === "hitl"
+          ? "awaiting"
+          : "waiting";
+
+async function drawFlow(runId) {
+  const box = document.getElementById("flow");
+  if (!box) return;
+  let v;
+  try {
+    v = await api("/runs/" + encodeURIComponent(runId) + "/verify");
+  } catch (err) {
+    box.innerHTML =
+      '<p class="note warn">The steps could not be checked: ' + esc(err.message) + "</p>";
+    return;
+  }
+  const path = v.data_path || {};
+  box.innerHTML =
+    '<div class="flow-row">' +
+    v.steps
+      .map((s, i) => {
+        const kind = nodeClass(s);
+        return (
+          '<button class="node ' +
+          kind +
+          '" data-a="' +
+          esc(s.agent) +
+          '" style="--d:' +
+          i * 130 +
+          'ms" title="' +
+          esc(s.does) +
+          '"><span class="node-dot"></span><span class="node-n">' +
+          String(i + 1).padStart(2, "0") +
+          '</span><span class="node-t">' +
+          esc(s.title || s.agent) +
+          '</span><span class="node-c">' +
+          (s.ran
+            ? s.checks.filter((c) => c.ok).length + " of " + s.checks.length + " checks"
+            : kind === "awaiting"
+              ? "waiting on you"
+              : "not reached") +
+          "</span></button>"
+        );
+      })
+      .join("") +
+    '</div><p class="flow-say"><span><b>' +
+    v.verified +
+    " of " +
+    v.of +
+    "</b> agents verified &nbsp; <b>" +
+    v.checks_passed +
+    " of " +
+    v.checks_run +
+    "</b> checks passed &nbsp; <b>" +
+    (path.queries || 0) +
+    "</b> queries over " +
+    fmt.format(path.rows || 0) +
+    " rows</span>" +
+    '<button class="ghost" id="stepwise">Open every check</button></p>';
+  box.querySelectorAll(".node").forEach((b) =>
+    b.addEventListener("click", () => window.showWorking(runId, b.dataset.a))
+  );
+  box.querySelector("#stepwise").addEventListener("click", () => window.showWorking(runId));
+}
+
+/* Numbers settle on their value rather than appearing from nowhere --------- */
+
+function countUp() {
+  if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  screen.querySelectorAll("dd[data-to]").forEach((el) => {
+    const to = Number(el.dataset.to);
+    if (!isFinite(to) || to <= 0) return;
+    const shape = el.dataset.fmt;
+    const t0 = performance.now() + 120;
+    const tick = (now) => {
+      const k = Math.max(0, Math.min(1, (now - t0) / 620));
+      const at = to * (1 - Math.pow(1 - k, 3));
+      el.textContent =
+        shape === "eur" ? eur(at) : shape === "two" ? at.toFixed(2) : fmt.format(Math.round(at));
+      if (k < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
 function decideHtml() {
@@ -299,7 +406,9 @@ async function drawTimeline(eventId) {
           ? '<em class="has">' + m.policies + " sites, " + eur(m.sum_insured_eur) + "</em>"
           : '<em class="none">no exposure yet</em>';
         return (
-          '<button class="tm" data-i="' +
+          '<button class="tm" style="--d:' +
+          i * 70 +
+          'ms" data-i="' +
           i +
           '" aria-current="' +
           (i === data.moments.length - 1) +
@@ -585,6 +694,7 @@ async function record(eventId) {
 }
 
 function drawRecord(r) {
+  screen.className = "";
   const ap = r.approval || {};
   const j = r.judge_summary || {};
   screen.innerHTML =

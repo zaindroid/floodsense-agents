@@ -192,6 +192,29 @@ class DeskTest(unittest.TestCase):
     def test_an_unknown_event_has_no_timeline(self) -> None:
         self.assertEqual(self.c.get("/desk/events/EMSR999/timeline").status_code, 400)
 
+    def test_drawing_the_timeline_does_not_replace_the_open_case(self) -> None:
+        # The replay starts seven more runs on the same event. The case the
+        # reviewer is deciding has to survive that.
+        case = self.c.get("/desk/events/EMSR773").json()
+        self.c.get("/desk/events/EMSR773/timeline")
+        again = self.c.get("/desk/events/EMSR773").json()
+        self.assertEqual(again["run"]["run_id"], case["run"]["run_id"])
+        self.assertEqual(again["figures"], case["figures"])
+        row = next(
+            e for e in self.c.get("/desk/events").json()["events"] if e["event_id"] == "EMSR773"
+        )
+        self.assertEqual(row["run_id"], case["run"]["run_id"])
+
+    def test_an_ad_hoc_question_does_not_replace_the_open_case(self) -> None:
+        case = self.c.get("/desk/events/EMSR773").json()
+        asked = self.c.post(
+            "/runs",
+            json={"question": "How much rain fell at Chiva?", "event_id": "EMSR773"},
+        ).json()
+        self.assertNotEqual(asked["run_id"], case["run"]["run_id"])
+        again = self.c.get("/desk/events/EMSR773").json()
+        self.assertEqual(again["run"]["run_id"], case["run"]["run_id"])
+
     # --- the app is the front door -----------------------------------------
 
     def test_the_root_now_leads_to_the_app(self) -> None:
@@ -241,9 +264,18 @@ class DeskTest(unittest.TestCase):
     def test_the_case_screen_offers_the_step_by_step_overlay(self) -> None:
         app_js = self.c.get("/app/app.js").text
         self.assertIn('id="stepwise"', app_js)
-        self.assertIn("window.showWorking(run.run_id)", app_js)
+        # The whole chain, or one step of it by name.
+        self.assertIn("window.showWorking(runId)", app_js)
+        self.assertIn("window.showWorking(runId, b.dataset.a)", app_js)
         self.assertIn("showWorking", self.c.get("/app/verify.js").text)
         self.assertIn("verify.js", self.c.get("/app/").text)
+
+    def test_the_case_screen_draws_the_chain_from_the_step_checks(self) -> None:
+        app_js = self.c.get("/app/app.js").text
+        self.assertIn('id="flow"', app_js)
+        self.assertIn('"/runs/" + encodeURIComponent(runId) + "/verify"', app_js)
+        self.assertIn("agents verified", app_js)
+        self.assertIn("checks passed", app_js)
 
     def test_the_earlier_pages_keep_their_own_urls(self) -> None:
         self.assertEqual(self.c.get("/console").status_code, 200)

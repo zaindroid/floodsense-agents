@@ -34,6 +34,10 @@ from floodsense_agents.zetaris import now_utc
 WEBHOOK_ENV = "DECISION_WEBHOOK"
 DISPATCH_TIMEOUT_S = 10
 
+# The question the desk opens a case with. Anything else on the same event is
+# a replay or someone's ad-hoc question, and neither is the case.
+DESK_QUESTION = "Which of our sites are at risk, and why?"
+
 
 def webhook_target() -> str | None:
     v = os.environ.get(WEBHOOK_ENV)
@@ -49,12 +53,22 @@ def is_released(run: dict) -> bool:
     return _approval(run).get("status") in ("approved", "edited")
 
 
+def is_case(row: dict) -> bool:
+    """Is this run the case on the desk, or something else on the same event?
+
+    Replays carry a replay timestamp and ad-hoc questions carry their own
+    wording. Both belong in the audit list; neither should stand in for the
+    case a reviewer has been deciding.
+    """
+    return row.get("question") == DESK_QUESTION and not row.get("replay_ts")
+
+
 def events(past: list[dict]) -> list[dict[str, Any]]:
     """What the desk shows: every known event, and the case on it if any."""
     newest: dict[str, dict] = {}
     for row in past:
         eid = row.get("event_id")
-        if eid and eid not in newest:  # past() is newest first
+        if eid and eid not in newest and is_case(row):  # past() is newest first
             newest[eid] = row
     out = []
     for spec in EVENTS.values():
