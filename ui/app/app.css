@@ -213,6 +213,136 @@ main {
   line-height: 1.45;
 }
 
+.declined {
+  border-left: 3px solid var(--hold);
+  padding: 2px 0 2px 14px;
+  margin-bottom: 24px;
+}
+
+.declined h1 {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  max-width: 26ch;
+}
+
+.declined p {
+  margin-top: 10px;
+  color: var(--soft);
+  max-width: 56ch;
+  font-size: 15px;
+}
+
+.timeline {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(96px, 1fr);
+  border-top: 1px solid var(--rule);
+  margin-top: 4px;
+  overflow-x: auto;
+}
+
+.tm {
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  padding: 10px 12px 12px 0;
+  cursor: pointer;
+}
+
+.tm:last-child {
+  border-right: 0;
+}
+
+.tm:hover {
+  background: var(--wash);
+}
+
+.tm[aria-current="true"] {
+  box-shadow: inset 0 2px 0 var(--ink);
+}
+
+.tm b {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.tm i {
+  display: block;
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--soft);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.tm em {
+  display: block;
+  font-style: normal;
+  font-size: 12.5px;
+  margin-top: 7px;
+}
+
+.tm em.none {
+  color: var(--soft);
+}
+
+.tm em.has {
+  color: var(--go);
+}
+
+.ask {
+  margin-top: 26px;
+  border-top: 1px solid var(--rule);
+  padding-top: 16px;
+}
+
+.ask summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--soft);
+  list-style: none;
+}
+
+.ask summary::-webkit-details-marker {
+  display: none;
+}
+
+.ask summary::before {
+  content: "+ ";
+  color: var(--rule);
+}
+
+.ask[open] summary::before {
+  content: "– ";
+}
+
+.ask summary:hover {
+  color: var(--ink);
+}
+
+.ask form {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ask input {
+  font: inherit;
+  flex: 1;
+  padding: 9px 10px;
+  border: 1px solid var(--rule);
+  background: #fff;
+  color: var(--ink);
+}
+
+.ask input:focus {
+  border-color: var(--river);
+}
+
 .broken {
   border-left: 3px solid var(--stop);
   background: #f7efef;

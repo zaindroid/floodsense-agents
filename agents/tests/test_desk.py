@@ -161,6 +161,37 @@ class DeskTest(unittest.TestCase):
         self.assertTrue(body["configured"])
         self.assertEqual(body["target"], "https://example.invalid/hook")
 
+    # --- what was knowable, and when ---------------------------------------
+
+    def test_the_timeline_replays_the_event_at_each_declared_moment(self) -> None:
+        body = self.c.get("/desk/events/EMSR773/timeline").json()
+        self.assertEqual(body["event_id"], "EMSR773")
+        self.assertEqual(len(body["moments"]), 7)
+        for m in body["moments"]:
+            self.assertNotIn("error", m)
+            self.assertTrue(m["label"])
+            self.assertTrue(m["replay_ts"])
+
+    def test_the_footprint_claim_appears_only_once_it_was_published(self) -> None:
+        moments = self.c.get("/desk/events/EMSR773/timeline").json()["moments"]
+        before = [m for m in moments if m["replay_ts"] < "2024-10-30T00:00:00Z"]
+        after = [m for m in moments if m["replay_ts"] >= "2024-10-30T00:00:00Z"]
+        self.assertTrue(before and after)
+        # Nobody had the mapping on the 29th, so nothing may claim exposure.
+        self.assertTrue(all(m["policies"] == 0 for m in before), before)
+        self.assertTrue(all(m["sum_insured_eur"] == 0 for m in before))
+        self.assertEqual(after[-1]["policies"], 7)
+        self.assertEqual(after[-1]["sum_insured_eur"], 21_600_000)
+
+    def test_the_chain_fills_in_as_the_event_unfolds(self) -> None:
+        moments = self.c.get("/desk/events/EMSR773/timeline").json()["moments"]
+        self.assertLess(moments[0]["anomalies"], moments[-1]["anomalies"])
+        self.assertLessEqual(moments[0]["links_supported"], moments[-1]["links_supported"])
+        self.assertEqual(moments[-1]["links_supported"], 4)
+
+    def test_an_unknown_event_has_no_timeline(self) -> None:
+        self.assertEqual(self.c.get("/desk/events/EMSR999/timeline").status_code, 400)
+
     # --- the app is the front door -----------------------------------------
 
     def test_the_root_now_leads_to_the_app(self) -> None:

@@ -132,6 +132,21 @@ function drawCase(eventId) {
   const { run, figures, released } = cache[eventId];
   const ap = run.approval || {};
   const decided = ap.status && ap.status !== "awaiting";
+
+  // The agents declined. Show why, and nothing else: there is no answer to
+  // dress up, and that is the point.
+  if (run.status === "out_of_scope") {
+    screen.innerHTML =
+      '<div class="declined"><h1>No answer from this case.</h1><p>' +
+      esc((run.scope && run.scope.reason) || run.summary || "") +
+      "</p></div>" +
+      '<p class="note">Nothing was read and no model was called, so this cost ' +
+      "one decision and no data.</p>" +
+      askHtml(eventId);
+    wireAsk(eventId);
+    return;
+  }
+
   screen.innerHTML =
     holes(run) +
     stale(run) +
@@ -177,13 +192,18 @@ function drawCase(eventId) {
     (released ? artifactsHtml(run) : "") +
     workingHtml(run) +
     '<p class="note"><button class="ghost" id="stepwise">' +
-    "Check every agent step</button></p>";
+    "Check every agent step</button></p>" +
+    '<h2 class="sec" style="margin-top:26px">What was knowable, and when</h2>' +
+    '<div id="timeline"><p class="note">Replaying the event\u2026</p></div>' +
+    askHtml(eventId);
 
   if (!decided) wireDecide(eventId);
   if (released) wireArtifacts(eventId, run);
   document.getElementById("stepwise").addEventListener("click", () => {
     window.showWorking(run.run_id);
   });
+  wireAsk(eventId);
+  drawTimeline(eventId);
 }
 
 function decideHtml() {
@@ -249,6 +269,115 @@ function wireDecide(eventId) {
     e.preventDefault();
     const text = document.getElementById("editText").value.trim();
     send("edit", { edits: text || null, reviewer_note: text || null });
+  });
+}
+
+/* What was knowable, and when ----------------------------------------------- */
+
+// The same question, asked again at each declared moment of the event. The
+// chain fills in, and the exposure claim appears only once the footprint was
+// published, because before that nobody had it.
+async function drawTimeline(eventId) {
+  const box = document.getElementById("timeline");
+  if (!box) return;
+  let data;
+  try {
+    data = await api("/desk/events/" + encodeURIComponent(eventId) + "/timeline");
+  } catch (err) {
+    box.innerHTML = '<p class="note warn">No replay: ' + esc(err.message) + "</p>";
+    return;
+  }
+  box.innerHTML =
+    '<div class="timeline">' +
+    data.moments
+      .map((m, i) => {
+        if (m.error) {
+          return '<button class="tm" disabled><b>' + esc(hhmm(m.replay_ts)) + "</b><i>" +
+            esc(m.error) + "</i></button>";
+        }
+        const money = m.policies
+          ? '<em class="has">' + m.policies + " sites, " + eur(m.sum_insured_eur) + "</em>"
+          : '<em class="none">no exposure yet</em>';
+        return (
+          '<button class="tm" data-i="' +
+          i +
+          '" aria-current="' +
+          (i === data.moments.length - 1) +
+          '"><b>' +
+          esc(hhmm(m.replay_ts)) +
+          "</b><i>" +
+          esc(m.label) +
+          "</i><em>" +
+          m.links_supported +
+          " of " +
+          m.links +
+          " links, " +
+          m.anomalies +
+          " anomalies</em>" +
+          money +
+          "</button>"
+        );
+      })
+      .join("") +
+    '</div><p class="note" id="tmNote"></p>';
+  box.querySelectorAll(".tm[data-i]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const m = data.moments[Number(b.dataset.i)];
+      box.querySelectorAll(".tm").forEach((x) => x.setAttribute("aria-current", x === b));
+      document.getElementById("tmNote").textContent =
+        "At " + hhmm(m.replay_ts) + " UTC: " + (m.summary || "nothing could be stated yet.");
+    })
+  );
+}
+
+const hhmm = (ts) =>
+  ts ? ts.slice(8, 10) + " " + ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][Number(ts.slice(5, 7)) - 1] + " " + ts.slice(11, 16) : "—";
+
+/* Ask something else --------------------------------------------------------- */
+
+// The desk is event-first on purpose, so this is deliberately a secondary
+// action: it is here to show what happens when the answer is no.
+function askHtml(eventId) {
+  return (
+    '<details class="ask"><summary>Ask something else about this event</summary>' +
+    '<form id="askForm"><input id="askText" ' +
+    'placeholder="Which of our sites are at risk, and why?" />' +
+    '<button class="ghost" type="submit">Ask</button></form>' +
+    '<div id="askOut"></div></details>'
+  );
+}
+
+function wireAsk(eventId) {
+  const form = document.getElementById("askForm");
+  if (!form) return;
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = document.getElementById("askText").value.trim();
+    const out = document.getElementById("askOut");
+    if (!q) return;
+    out.innerHTML = '<p class="note">Asking\u2026</p>';
+    let run;
+    try {
+      run = await api("/runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: q, event_id: eventId }),
+      });
+    } catch (err) {
+      out.innerHTML = '<p class="note warn">' + esc(err.message) + "</p>";
+      return;
+    }
+    if (run.status === "out_of_scope") {
+      out.innerHTML =
+        '<div class="declined" style="margin-top:14px"><h1>No.</h1><p>' +
+        esc((run.scope && run.scope.reason) || run.summary) +
+        "</p></div>";
+      return;
+    }
+    out.innerHTML =
+      '<p class="note">Answered. ' +
+      esc(run.summary || "") +
+      '</p>';
   });
 }
 

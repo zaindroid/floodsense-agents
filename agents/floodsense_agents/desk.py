@@ -85,6 +85,25 @@ def events(past: list[dict]) -> list[dict[str, Any]]:
     return out
 
 
+def moment(run: dict) -> dict[str, Any]:
+    """What one replay moment knew, small enough to put seven on a screen."""
+    hyps = run.get("hypotheses") or []
+    exposure = run.get("exposure") or {}
+    anomalies = run.get("anomalies") or []
+    return {
+        "replay_ts": run.get("replay_ts"),
+        "links_supported": sum(1 for h in hyps if h.get("status") == "supported"),
+        "links": len(hyps),
+        "anomalies": len(anomalies),
+        "policies": exposure.get("policies", 0),
+        "sum_insured_eur": exposure.get("sum_insured_eur", 0.0),
+        "actions": len(run.get("playbook") or []),
+        "judge_overall": (run.get("judge_summary") or {}).get("overall"),
+        "summary": run.get("summary", ""),
+        "chain": [{"id": h["id"], "link": h.get("link"), "status": h.get("status")} for h in hyps],
+    }
+
+
 def summarise(run: dict) -> dict[str, Any]:
     """The two or three numbers the desk leads with."""
     exposure = run.get("exposure") or {}

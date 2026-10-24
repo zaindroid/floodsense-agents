@@ -51,6 +51,7 @@ from fastapi.responses import (
 
 from floodsense_agents import __version__
 from floodsense_agents import desk, labelling
+from floodsense_agents.events import spec
 from floodsense_agents.models import ApprovalDecision, RunRequest
 from floodsense_agents.readiness import report as readiness_report
 from floodsense_agents.verify import report as verify_report
@@ -204,6 +205,43 @@ def desk_event(event_id: str):
             raise HTTPException(400, str(e).strip('"')) from e
     run = labelling.labelled(run)
     return _live({"run": run, "figures": desk.summarise(run), "released": desk.is_released(run)})
+
+
+_TIMELINE: dict[str, dict] = {}
+
+
+@app.get("/desk/events/{event_id}/timeline", include_in_schema=False)
+def desk_timeline(event_id: str):
+    """The same question asked at each declared moment of the event.
+
+    What was knowable when: the chain fills in, the footprint appears only
+    once Copernicus published it, and the gauge going out is visible as the
+    reading that stops rather than as a gap nobody mentions.
+    """
+    if event_id in _TIMELINE:
+        return _live(dict(_TIMELINE[event_id]))
+    try:
+        ev = spec(event_id)
+    except KeyError as e:
+        raise HTTPException(400, str(e).strip('"')) from e
+    rt = runtime()
+    points = []
+    for ts, label in ev.moments:
+        try:
+            run = rt.start(RunRequest(question=_DESK_QUESTION, event_id=event_id, replay_ts=ts))
+            point = desk.moment(run)
+        except Exception as e:  # noqa: BLE001 - one bad moment must not lose the rest
+            point = {"replay_ts": ts, "error": f"{type(e).__name__}: {e}"[:160]}
+        point["label"] = label
+        points.append(point)
+    body = {
+        "event_id": event_id,
+        "name": ev.name,
+        "footprint_published_utc": ev.footprint_published_utc,
+        "moments": points,
+    }
+    _TIMELINE[event_id] = body
+    return _live(dict(body))
 
 
 @app.get("/desk/dispatch-target", include_in_schema=False)

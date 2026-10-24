@@ -43,6 +43,7 @@ STATE_KEYS = (
     "provenance",
     "revise_rounds",
     "repair_rounds",
+    "scope",
     "model_ids",
     "error",
 )

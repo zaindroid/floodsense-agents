@@ -175,7 +175,7 @@ class GraphTest(unittest.TestCase):
                 self.assertIn(k, e)
         self.assertEqual(
             [e["node"] for e in tr],
-            ["watchers", "investigator", "skeptic", "exposure", "playbook", "judge"],
+            ["scope", "watchers", "investigator", "skeptic", "exposure", "playbook", "judge"],
         )
 
     def test_replay_ts_hides_the_future(self) -> None:

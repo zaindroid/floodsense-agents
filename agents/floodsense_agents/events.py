@@ -28,6 +28,9 @@ class EventSpec:
     # use the footprint, because nobody had it yet. Proposed: confirm against
     # the activation record.
     footprint_published_utc: str
+    # Moments worth replaying the run at, so a reviewer can see what was
+    # knowable when. Proposed from the seed; Saleeta and Urvashi confirm.
+    moments: tuple[tuple[str, str], ...]
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -46,6 +49,15 @@ EVENTS: dict[str, EventSpec] = {
         ("chiva", "turis"),
         (38.90, 39.70, -1.10, -0.20),
         "2024-10-30T00:00:00Z",
+        (
+            ("2024-10-29T09:00:00Z", "Rain begins, red warning at Chiva"),
+            ("2024-10-29T13:00:00Z", "Rain over the catchment for four hours"),
+            ("2024-10-29T15:00:00Z", "Discharge reaches 310 m3/s"),
+            ("2024-10-29T17:00:00Z", "Peak reading, 2,282 m3/s"),
+            ("2024-10-29T18:00:00Z", "The gauge stops reporting"),
+            ("2024-10-29T19:11:00Z", "ES-Alert reaches phones"),
+            ("2024-10-30T06:00:00Z", "Copernicus publishes the footprint"),
+        ),
     ),
     "EMSR517": EventSpec(
         "EMSR517",
@@ -59,6 +71,12 @@ EVENTS: dict[str, EventSpec] = {
         ("ahrweiler",),
         (50.20, 50.70, 6.60, 7.40),
         "2021-07-15T00:00:00Z",
+        (
+            ("2021-07-14T14:00:00Z", "Rain over the Eifel"),
+            ("2021-07-14T19:00:00Z", "Altenahr at 1,000 m3/s"),
+            ("2021-07-14T20:00:00Z", "The gauge stops reporting"),
+            ("2021-07-15T06:00:00Z", "Copernicus publishes the footprint"),
+        ),
     ),
 }
 ALIASES = {"valencia_2024": "EMSR773", "ahr_2021": "EMSR517"}

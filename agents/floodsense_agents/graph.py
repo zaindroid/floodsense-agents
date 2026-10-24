@@ -1,6 +1,7 @@
 """The FloodSense LangGraph.
 
-    watchers → investigator → skeptic ─┬─ not_supported & no revise yet → revise → investigator → skeptic
+    scope ─┬─ out of scope → END (declined, no data read, no model call)
+           └─ watchers → investigator → skeptic ─┬─ not_supported & no revise yet → revise → investigator
                                        └─ → exposure → playbook → judge ─┬─ flagged & repair left → playbook (repair) → judge
                                                                           └─ → hitl (interrupt) → END
 FF_SKEPTIC=false skips the Skeptic, FF_JUDGE=false skips the Judge, FF_HITL=false auto-approves (dev only).
@@ -20,12 +21,21 @@ from langgraph.graph import END, START, StateGraph
 
 from floodsense_agents import hitl as hitl_mod
 from floodsense_agents.nightshift import build_llm
-from floodsense_agents.nodes import exposure, investigator, judge, playbook, skeptic, watchers
+from floodsense_agents.nodes import (
+    exposure,
+    investigator,
+    judge,
+    playbook,
+    scope,
+    skeptic,
+    watchers,
+)
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, NoMemory
 from floodsense_agents.zetaris import build_zetaris
 
 PLANNED_NODES: tuple[str, ...] = (
+    "scope",
     "watchers",
     "investigator",
     "skeptic",
@@ -57,7 +67,13 @@ def build_graph(
     g.add_node("exposure", exposure.make(deps))
     g.add_node("playbook", playbook.make(deps))
     g.add_node("hitl", hitl_mod.hitl)
-    g.add_edge(START, "watchers")
+    # The gate runs before anything reads data or calls a model: a question
+    # these views cannot answer is declined, not attempted.
+    g.add_node("scope", scope.make())
+    g.add_edge(START, "scope")
+    g.add_conditional_edges(
+        "scope", scope.route_after_scope, {"watchers": "watchers", "declined": END}
+    )
     g.add_edge("watchers", "investigator")
 
     if use_skeptic:
