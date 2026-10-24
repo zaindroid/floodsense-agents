@@ -284,7 +284,7 @@
             '" aria-current="' +
             (litAgent === a.agent) +
             '"><td><span class="rdy-agent">' +
-            esc(a.agent) +
+            esc(a.title || a.agent) +
             '</span><div class="rdy-does">' +
             esc(a.does) +
             "</div></td><td>" +

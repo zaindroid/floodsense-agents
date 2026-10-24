@@ -69,7 +69,7 @@ class ReadinessTest(unittest.TestCase):
         )
         # Every rung names at least one agent, and every agent is covered by one.
         covered = {a for r in rep["rungs"] for a in r["agents"]}
-        for name, _, _ in readiness.AGENTS:
+        for name, _title, _lane, _does in readiness.AGENTS:
             self.assertIn(name, covered, f"{name} is not covered by any rung")
 
     def test_the_rungs_that_pass_today_pass(self) -> None:

@@ -19,7 +19,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from floodsense_agents.governance import DEFINITIONS
-from floodsense_agents.readiness import Check, _evidence, _views_in
+from floodsense_agents.readiness import Check, _evidence, _views_in, title_of
 from floodsense_agents.settings import settings
 from floodsense_agents.zetaris import now_utc
 
@@ -30,6 +30,7 @@ FAKE_SOURCE = "zetaris-fake"
 @dataclass
 class Step:
     agent: str
+    title: str
     lane: str
     does: str
     ran: bool = False
@@ -87,6 +88,7 @@ def _step(run: dict, agent: str, lane: str, does: str) -> Step:
     t = _trace(run, agent)
     return Step(
         agent=agent,
+        title=title_of(agent),
         lane=t.get("lane") or lane,
         does=does,
         ran=bool(t),

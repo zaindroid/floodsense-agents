@@ -28,16 +28,28 @@ from floodsense_agents.models import Claim
 from floodsense_agents.settings import settings
 from floodsense_agents.zetaris import now_utc
 
-# Agents in graph order, with the rung each one leans on hardest.
-AGENTS: tuple[tuple[str, str, str], ...] = (
-    ("watchers", "sql", "scans the window for anomalies, every one carrying a query id"),
-    ("investigator", "sql", "proposes the causal chain and writes cited claims"),
-    ("skeptic", "sql", "tries to break each link with counter-check queries"),
-    ("exposure", "sql", "joins the footprint to the portfolio"),
-    ("playbook", "deep", "drafts actions, each tied to the claims that justify it"),
-    ("judge", "deep", "scores grounding, citations and every number"),
-    ("hitl", "none", "holds outbound actions until a named reviewer decides"),
+# Agents in graph order. `title` is what a person reads, `agent` is the node id
+# in the graph, kept beside it so a screen and the code match. "hitl" above all:
+# nobody outside the team reads that as human-in-the-loop.
+AGENTS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "watchers",
+        "Hazard scan",
+        "sql",
+        "scans the window for anomalies, every one carrying a query id",
+    ),
+    ("investigator", "Investigator", "sql", "proposes the causal chain and writes cited claims"),
+    ("skeptic", "Skeptic", "sql", "tries to break each link with counter-check queries"),
+    ("exposure", "Exposure join", "sql", "joins the footprint to the portfolio"),
+    ("playbook", "Playbook", "deep", "drafts actions, each tied to the claims that justify it"),
+    ("judge", "Judge", "deep", "scores grounding, citations and every number"),
+    ("hitl", "Human approval", "none", "holds outbound actions until a named reviewer decides"),
 )
+
+
+def title_of(agent: str) -> str:
+    return next((t for a, t, _, _ in AGENTS if a == agent), agent)
+
 
 _FROM = re.compile(r"\b(?:from|join)\s+([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)", re.I)
 
@@ -542,12 +554,13 @@ def agent_stats(run: dict) -> list[dict[str, Any]]:
     by_node = {t.get("node"): t for t in run.get("trace") or []}
     rungs = [fn({}, None) for fn in RUNGS]
     out = []
-    for name, lane, does in AGENTS:
+    for name, title, lane, does in AGENTS:
         t = by_node.get(name) or {}
         covered = [rg.n for rg in rungs if name in rg.agents]
         out.append(
             {
                 "agent": name,
+                "title": title,
                 "lane": t.get("lane", lane),
                 "does": does,
                 "ran": bool(t),

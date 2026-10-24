@@ -58,6 +58,16 @@ class VerifyTest(unittest.TestCase):
         self.assertGreater(rep["checks_run"], 20)
         self.assertEqual(rep["checks_passed"], rep["checks_run"])
 
+    def test_every_step_carries_a_name_a_person_can_read(self) -> None:
+        rep = verify.report(self.snap)
+        titles = {s["agent"]: s["title"] for s in rep["steps"]}
+        # "hitl" is the node id; nobody outside the team reads it as a word.
+        self.assertEqual(titles["hitl"], "Human approval")
+        self.assertEqual(titles["watchers"], "Hazard scan")
+        for agent, title in titles.items():
+            self.assertTrue(title and title != agent, agent)
+            self.assertTrue(title[0].isupper(), title)
+
     def test_each_step_shows_the_queries_it_ran_with_their_source(self) -> None:
         rep = verify.report(self.snap)
         by = {s["agent"]: s for s in rep["steps"]}

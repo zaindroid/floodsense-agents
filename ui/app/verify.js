@@ -70,6 +70,8 @@
 .vfy-ct{font-size:11.5px;color:var(--soft,#5c636c)}
 .vfy-agent.verified .vfy-ct{color:var(--go,#40674f)}
 .vfy-agent.partial .vfy-ct,.vfy-agent.failed .vfy-ct{color:var(--hold,#9a6b1f)}
+.vfy-ttl{margin:0 0 3px;font-size:19px;font-weight:500;letter-spacing:-0.01em}
+.vfy-ttl span{font-size:11.5px;font-weight:400;color:var(--soft,#5c636c);margin-left:8px;letter-spacing:0}
 .vfy-does{font-size:16.5px;line-height:1.4;margin:0 0 4px;max-width:52ch}
 .vfy-sum{font-size:13px;color:var(--soft,#5c636c);margin:0 0 14px}
 .vfy h3{font-size:12px;font-weight:600;color:var(--soft,#5c636c);margin:18px 0 6px}
@@ -93,6 +95,7 @@
 .vfy-q summary i.fake{color:var(--hold,#9a6b1f)}
 .vfy-q pre{margin:8px 0 2px;padding:8px 10px;background:var(--wash,#f2f2ee);font:inherit;
   font-size:12.5px;white-space:pre-wrap;color:var(--soft,#5c636c);line-height:1.5}
+.vfy-wait{border-left:2px solid var(--hold,#9a6b1f);padding:4px 0 4px 10px;margin:0 0 14px;font-size:13.5px;line-height:1.5;color:var(--soft,#5c636c);max-width:52ch}
 .vfy-msg{padding:28px 24px;font-size:15px;line-height:1.6;color:var(--soft,#5c636c);max-width:60ch}
 @media (max-width:820px){.vfy-body{grid-template-columns:1fr;gap:18px}}
 `;
@@ -154,8 +157,13 @@
       panel.querySelector(".vfy-x").addEventListener("click", close);
       return;
     }
-    const bad = data.steps.findIndex((s) => s.status !== "verified");
-    picked = bad === -1 ? 0 : bad;
+    // Something that went wrong first; otherwise the first agent that ran.
+    // Never open on a step that has not run: it has nothing to show.
+    const broken = data.steps.findIndex(
+      (s) => s.status === "failed" || s.status === "partial"
+    );
+    const ran = data.steps.findIndex((s) => s.ran);
+    picked = broken !== -1 ? broken : ran !== -1 ? ran : 0;
     shown = null;
     draw();
   };
@@ -305,7 +313,7 @@
       '" aria-current="' +
       (i === picked) +
       '"><span class="vfy-nm">' +
-      esc(s.agent) +
+      esc(s.title || s.agent) +
       '</span><span class="vfy-ct">' +
       (s.ran ? n + "/" + s.checks.length : "—") +
       "</span></button></li>"
@@ -316,7 +324,11 @@
     if (!s) return "<div></div>";
     const made = Object.entries(s.produced || {}).filter(([, v]) => v != null && v !== "");
     return (
-      '<div><p class="vfy-does">' +
+      '<div><h4 class="vfy-ttl">' +
+      esc(s.title || s.agent) +
+      '<span>' +
+      esc(s.agent) +
+      ' node</span></h4><p class="vfy-does">' +
       esc(s.does) +
       '</p><p class="vfy-sum">' +
       (s.ran
@@ -326,6 +338,11 @@
           (s.latency_ms != null ? " · " + s.latency_ms + " ms" : "")
         : "<b>" + WORD[s.status] + ".</b> " + esc(s.summary)) +
       "</p>" +
+      (s.ran
+        ? ""
+        : '<p class="vfy-wait">Nothing to verify here yet. This agent has not run, so ' +
+          "there are no checks to pass or fail. It is reported as <b>not reached</b> " +
+          "rather than as passing.</p>") +
       (made.length
         ? "<h3>What it produced</h3><dl class=\"vfy-made\">" +
           made
