@@ -62,8 +62,9 @@ jobs:
           HOOK: ${{ secrets.DEPLOY_WEBHOOK }}
         run: |
           if [ -z "$HOOK" ]; then
-            echo "No DEPLOY_WEBHOOK secret: relying on the platform's own"
-            echo "auto-deploy for pushes to main."
+            echo "No DEPLOY_WEBHOOK secret. agents/ is now current in git,"
+            echo "but the container still serves the previous code until"
+            echo "someone redeploys. Pushes alone do not redeploy."
             exit 0
           fi
           curl -fsS "$HOOK" > /dev/null

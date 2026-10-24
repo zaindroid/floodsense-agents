@@ -48,8 +48,12 @@ Two repository secrets:
 
 - `MONOREPO_TOKEN`, required, read access to the private monorepo:
   `gh secret set MONOREPO_TOKEN --repo zaindroid/floodsense-agents`
-- `DEPLOY_WEBHOOK`, optional, a deploy hook to call after a sync. Without it
-  the sync relies on the platform's own auto-deploy for pushes to `main`.
+- `DEPLOY_WEBHOOK`, needed for a sync to reach the running container. A push
+  to this repo does not redeploy on its own: a test push left the container
+  running untouched for four minutes. Use the per-app deploy hook from the
+  Coolify dashboard, which is scoped to this one app, rather than a
+  platform-wide API token. Without it a sync still lands in git, but the
+  container keeps serving the previous code until someone redeploys.
 
 `SOURCE_REF` at the top of the workflow points at the agents feature branch.
 Change it to `main` once that pull request is merged.
