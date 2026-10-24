@@ -1,0 +1,14 @@
+# zorc app contract. The service itself lives under agents/, mirrored from the
+# Hackathon-Monorepo by .github/workflows/sync-from-monorepo.yml.
+name: floodsense-agents
+port: 8080
+memory_mb: 512
+
+domains:
+  - floodsense-agents.zaindroid.me
+
+# Runs on the in-process stand-ins, so there is nothing to provision and no
+# credential to hold. See README.md for the switch to live data and inference.
+database: false
+redis: false
+ai: false

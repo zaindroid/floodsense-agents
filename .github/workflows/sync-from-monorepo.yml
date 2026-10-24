@@ -1,0 +1,70 @@
+name: sync-from-monorepo
+
+# The service is owned in the monorepo; this repo is only its deploy mirror.
+# Pulls agents/ on a schedule, and the resulting push is what redeploys.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+env:
+  SOURCE_REPO: GenAI-Open-Agent-Hackathon/Hackathon-Monorepo
+  # Point this at main once the agents pull request is merged.
+  SOURCE_REF: feat/agents-langgraph-hitl-judge
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone the monorepo
+        env:
+          TOKEN: ${{ secrets.MONOREPO_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "MONOREPO_TOKEN is unset and $SOURCE_REPO is private." >&2
+            exit 1
+          fi
+          git clone --quiet --depth 1 --branch "$SOURCE_REF" \
+            "https://x-access-token:$TOKEN@github.com/$SOURCE_REPO.git" source
+
+      - name: Mirror the agents service
+        id: mirror
+        run: |
+          rm -rf agents
+          cp -r source/agents agents
+          find agents -name __pycache__ -type d -prune -exec rm -rf {} +
+          sha=$(git -C source rev-parse HEAD)
+          rm -rf source
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "agents/ already matches $SOURCE_REF at ${sha:0:12}"
+            exit 0
+          fi
+
+          # Stamp only on a real change, or GET /version would churn hourly.
+          built=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          sed -i "s|^ENV GIT_SHA=.*|ENV GIT_SHA=$sha BUILT_AT=$built|" Dockerfile
+          git add -A
+          git -c user.name="Zain Ul Haq" -c user.email="zainey4@gmail.com" \
+              commit -q -m "sync: agents at ${sha:0:12} from $SOURCE_REF"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Ask the platform to redeploy
+        if: steps.mirror.outputs.changed == 'true'
+        env:
+          HOOK: ${{ secrets.DEPLOY_WEBHOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "No DEPLOY_WEBHOOK secret: relying on the platform's own"
+            echo "auto-deploy for pushes to main."
+            exit 0
+          fi
+          curl -fsS "$HOOK" > /dev/null
+          echo "redeploy requested"
