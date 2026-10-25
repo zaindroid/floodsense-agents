@@ -9,7 +9,9 @@ WORKDIR /app
 COPY agents/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY agents/floodsense_agents ./floodsense_agents
-# The service serves ui/mock at /mock and looks for it beside the package.
+# The console and the pages are this repository's own: the monorepo's agents/
+# is the graph's API and nothing else. console/ finds ui/ beside itself.
+COPY console/*.py console/console.html ./console/
 COPY ui/mock ./ui/mock
 COPY ui/app ./ui/app
 
@@ -25,4 +27,4 @@ ENV AGENTS_HOST=0.0.0.0 \
     PYTHONUNBUFFERED=1
 
 EXPOSE 8080
-CMD ["python", "-m", "floodsense_agents"]
+CMD ["python", "-m", "console"]

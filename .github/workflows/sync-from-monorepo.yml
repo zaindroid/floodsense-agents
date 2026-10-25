@@ -43,15 +43,12 @@ jobs:
           git clone --quiet --depth 1 --branch "$SOURCE_REF" \
             "https://x-access-token:$TOKEN@github.com/$SOURCE_REPO.git" source
 
-      - name: Mirror the agents service and the ui mock
+      - name: Mirror the agents service
         id: mirror
         if: steps.clone.outputs.skip != 'true'
         run: |
-          rm -rf agents ui
+          rm -rf agents
           cp -r source/agents agents
-          mkdir -p ui
-          cp -r source/ui/mock ui/mock
-          cp -r source/ui/app ui/app
           find agents -name __pycache__ -type d -prune -exec rm -rf {} +
           sha=$(git -C source rev-parse HEAD)
           rm -rf source

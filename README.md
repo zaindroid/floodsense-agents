@@ -5,11 +5,15 @@ Deploy mirror for the FloodSense EU agents service. The code is owned in
 exists because the platform deploys one repo to one container and reads the
 app contract from a repo root.
 
-Nothing here should be edited by hand except the three deploy files.
+The console and its pages are owned here, not in the monorepo: the review on
+monorepo PR #4 asked the agents service to be the graph's API and nothing
+else. `console/` imports that service and registers the desk, the mocks and
+the audit views on the same app, so this is still one container on one port.
 
 | path | owner |
 |---|---|
 | `agents/` | the monorepo, overwritten on every sync |
+| `console/`, `ui/` | this repo. The sync never touches them |
 | `app.yaml`, `Dockerfile`, `.github/workflows/sync-from-monorepo.yml` | this repo |
 
 ## Deployed shape
@@ -40,7 +44,7 @@ reviewer approves or edits it.
 ## Sync
 
 `sync-from-monorepo.yml` runs every 15 minutes and on demand. It copies
-`agents/` from the monorepo, stamps the source sha into the `Dockerfile`, and
+`agents/` from the monorepo (and only that), stamps the source sha into the `Dockerfile`, and
 pushes only when something actually changed. That push is what triggers a
 redeploy.
 
@@ -73,7 +77,7 @@ Both are env changes, no code change.
 
 ## Local run
 
-    cd agents
-    pip install -r requirements.txt
-    python -m floodsense_agents        # http://127.0.0.1:8100
-    python -m unittest discover -s tests
+    pip install -r agents/requirements.txt
+    PYTHONPATH=agents python -m console          # http://127.0.0.1:8100
+    PYTHONPATH=agents python -m unittest discover -s console/tests -t .
+    cd agents && python -m unittest discover -s tests
