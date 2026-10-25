@@ -14,7 +14,7 @@ COPY ui/mock ./ui/mock
 COPY ui/app ./ui/app
 
 # Rewritten on every sync by .github/workflows/sync-from-monorepo.yml.
-ENV GIT_SHA=0f47ca0131588ec610dfe8757db4e99f937d1bdd BUILT_AT=2026-10-25T08:27:20Z
+ENV GIT_SHA=fb03c83cd1d30dabb02687e8669294cec6f5b0e3 BUILT_AT=2026-10-25T09:14:57Z
 
 # 8080 is the only port Coolify's healthcheck targets. Runs on the stand-ins:
 # no Zetaris or Meterless credentials, so no secrets reach this image.

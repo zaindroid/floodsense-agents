@@ -164,16 +164,49 @@ class ZetarisClient:
             )
 
     @staticmethod
-    def _rows(js) -> list[dict]:
+    def _typed(v):
+        """Give a value back its type.
+
+        Zetaris answers every column as a string: numbers as '61' or
+        '1.51465E8', booleans as 'true', timestamps as '2024-10-20 00:00:00.0'.
+        SQLite and Postgres answer with typed JSON, and the nodes count,
+        format and compare these values, so without this a run against Zetaris
+        fails on the first f"{x:,.0f}".
+
+        Converted only where it is unambiguous. A leading zero means an
+        identifier rather than a number, so '007' stays '007'; anything that
+        does not parse, timestamps included, is left exactly as it arrived.
+        """
+        if not isinstance(v, str):
+            return v
+        s = v.strip()
+        low = s.lower()
+        if low == "true":
+            return True
+        if low == "false":
+            return False
+        digits = s.lstrip("+-")
+        if not digits or (digits[0] == "0" and len(digits) > 1 and digits[1] not in ".eE"):
+            return v
+        try:
+            f = float(s)
+        except ValueError:
+            return v
+        return int(s) if digits.isdigit() else f
+
+    @classmethod
+    def _rows(cls, js) -> list[dict]:
         if isinstance(js, dict) and "data" in js:
             cols = [
                 c["name"] if isinstance(c, dict) else c
                 for c in (js.get("headers") or js.get("columns") or [])
             ]
-            return [dict(zip(cols, r)) if isinstance(r, list) else r for r in js["data"]]
-        if isinstance(js, dict) and "rows" in js:
-            return js["rows"]
-        return js if isinstance(js, list) else []
+            rows = [dict(zip(cols, r)) if isinstance(r, list) else r for r in js["data"]]
+        elif isinstance(js, dict) and "rows" in js:
+            rows = js["rows"]
+        else:
+            rows = js if isinstance(js, list) else []
+        return [{k: cls._typed(v) for k, v in row.items()} for row in rows]
 
 
 # Fake Zetaris: the contract views in SQLite. ATTACH gives the
