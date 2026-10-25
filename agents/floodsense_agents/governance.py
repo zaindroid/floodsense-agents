@@ -75,14 +75,38 @@ class Definition:
     agreed_on: str | None = None  # None until the team signs it off
 
 
+# Numbers measured against floodsense.hazard_timeline on 2026-10-25, over the
+# whole loaded record (3,264 rows; 576 inside the EMSR773 window, 2,688
+# outside), so each screen is known to separate the event from the rest of the
+# record rather than merely to fire:
+#
+#   rain >= 15 mm/h      5 hours at 5 points inside, 0 outside
+#   24h rain >= 80 mm    7 of 8 points inside, 0 outside
+#   discharge >= 100     peaks at 471 m3/s on 30 Oct
+#
+# The warehouse is gridded reanalysis, not gauges: a 0.25 deg cell averages
+# away the station peak, so the record tops out at 16.4 mm/h where Chiva
+# recorded far more. Station-scale numbers (AEMET calls 30-60 mm/h "muy
+# fuerte") cannot be reached by a cell mean and screened out the whole event.
+# A relative screen was tried and rejected: discharge rises 22-481x outside
+# the window as well, so "tripled within the window" fires always and
+# separates nothing.
 DEFINITIONS: dict[str, Definition] = {
     # Screening and corroboration ask different questions, so they carry
     # different numbers. Both are declared; neither is a loose literal.
     "anomaly_rain": Definition(
         term="anomaly_rain",
-        value=30,
+        value=15,
         unit="mm/h",
-        wording="hourly rain at or above 30 mm",
+        wording="hourly rain at or above 15 mm",
+        used_by="watchers",
+        owner="hazard data lead",
+    ),
+    "anomaly_rain_24h": Definition(
+        term="anomaly_rain_24h",
+        value=80,
+        unit="mm/24h",
+        wording="24-hour rain at or above 80 mm",
         used_by="watchers",
         owner="hazard data lead",
     ),
@@ -96,9 +120,9 @@ DEFINITIONS: dict[str, Definition] = {
     ),
     "extreme_rain": Definition(
         term="extreme_rain",
-        value=20,
+        value=10,
         unit="mm/h",
-        wording="rain was extreme (an hour >= 20 mm at a catchment point)",
+        wording="rain was extreme (an hour >= 10 mm at a catchment point)",
         used_by="skeptic",
         owner="hazard data lead",
     ),

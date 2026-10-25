@@ -94,18 +94,27 @@ class Zetaris(Protocol):
     def run_sql(self, sql: str) -> Evidence: ...
 
 
+# A statement the engine refused names an error class in brackets, or says
+# what it expected. Anything else in a 400 is about the caller, not the SQL.
+_STATEMENT_ERROR = re.compile(r"\[[A-Z][A-Z0-9_.]+]|wrong type|expecting", re.I)
+
+
 def _token_rejected(r: httpx.Response) -> bool:
     """Whether to log in again and retry.
 
-    Measured against the engine, because it is not what the status code
-    suggests: an expired token comes back 400 {"msg":"Not Allowed"}, and only
-    a missing Authorization header is 401. A rejected statement is 400 too,
-    so the body has to be read to tell a dead token from bad SQL -- retrying
-    bad SQL would just double the wait before the same error.
+    Measured against the engine, because the status code does not say: a dead
+    token comes back 400, and has been seen as both {"msg":"Not Allowed"} and
+    {"msg":"Bad Request"}. Only a missing Authorization header is 401. A
+    refused statement is 400 as well, so a 400 counts as a token problem
+    unless the body names the statement -- matching the wordings instead
+    would mean a fourth one silently stops the retry, which is how a whole
+    session of queries failed with the token one re-login away.
     """
     if r.status_code in (401, 403):
         return True
-    return r.status_code == 400 and "not allowed" in r.text.lower()
+    if r.status_code != 400:
+        return False
+    return not _STATEMENT_ERROR.search(r.text)
 
 
 class ZetarisClient:

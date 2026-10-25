@@ -44,17 +44,43 @@ def window(state: FloodState) -> tuple[str, str]:
     return ev["window_from_utc"], min(end, ev["window_to_utc"])
 
 
+def peak_per_point(rows: list[dict]) -> list[dict]:
+    """One row per point, keeping the first.
+
+    The hazard queries are ordered by the value, so the first row a point
+    appears in is its peak. hazard_timeline repeats a daily discharge across
+    the 24 hours of its day, so the raw top rows were three copies of one
+    point reported as three anomalies.
+    """
+    seen: set[str] = set()
+    out: list[dict] = []
+    for r in rows:
+        if r["point_id"] not in seen:
+            seen.add(r["point_id"])
+            out.append(r)
+    return out
+
+
 def make(deps: Deps):
     def watchers(state: FloodState) -> dict:
         t = time.time()
         s = settings.schema
         rain_at = DEFINITIONS["anomaly_rain"]
+        day_at = DEFINITIONS["anomaly_rain_24h"]
         flow_at = DEFINITIONS["anomaly_discharge"]
         t0, t1 = window(state)
         q = {
             "rain": f"SELECT point_id, ts_utc, rain_mm FROM {s}.hazard_timeline WHERE ts_utc "
             f"BETWEEN "
             f"'{t0}' AND '{t1}' AND rain_mm >= {rain_at.value} ORDER BY rain_mm DESC",
+            # An hourly cell mean understates a convective peak, so the
+            # accumulation is the screen that sees this kind of event. Grouped
+            # per point, so each one reports the hour its total crossed.
+            "rain_24h": f"SELECT point_id, MIN(ts_utc) AS ts_utc, MAX(acc) AS rain_24h_mm FROM ("
+            f"SELECT point_id, ts_utc, SUM(rain_mm) OVER (PARTITION BY point_id ORDER BY ts_utc "
+            f"ROWS BETWEEN 23 PRECEDING AND CURRENT ROW) AS acc FROM {s}.hazard_timeline WHERE "
+            f"ts_utc BETWEEN '{t0}' AND '{t1}') z WHERE acc >= {day_at.value} GROUP BY point_id "
+            f"ORDER BY MAX(acc) DESC",
             "discharge": f"SELECT point_id, ts_utc, discharge_m3s FROM {s}.hazard_timeline WHERE "
             f"ts_utc BETWEEN "
             f"'{t0}' AND '{t1}' AND discharge_m3s >= {flow_at.value} ORDER BY discharge_m3s DESC",
@@ -69,7 +95,7 @@ def make(deps: Deps):
             f"{s}.provenance"
         )
         items: list[Anomaly] = []
-        for r in evid["rain"].rows_sample[:5]:
+        for r in peak_per_point(evid["rain"].rows_sample)[:5]:
             items.append(
                 Anomaly(
                     id=f"A{len(items) + 1}",
@@ -82,7 +108,20 @@ def make(deps: Deps):
                     query_id=evid["rain"].query_id,
                 )
             )
-        for r in evid["discharge"].rows_sample[:3]:
+        for r in evid["rain_24h"].rows_sample[:3]:
+            items.append(
+                Anomaly(
+                    id=f"A{len(items) + 1}",
+                    kind="rain",
+                    point_id=r["point_id"],
+                    ts_utc=r["ts_utc"],
+                    value=r["rain_24h_mm"],
+                    unit="mm/24h",
+                    why=day_at.wording,
+                    query_id=evid["rain_24h"].query_id,
+                )
+            )
+        for r in peak_per_point(evid["discharge"].rows_sample)[:3]:
             items.append(
                 Anomaly(
                     id=f"A{len(items) + 1}",
