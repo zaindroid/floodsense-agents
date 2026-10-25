@@ -26,18 +26,6 @@ Contracts (gameplan v2 §5.5) are in `models.py` field for field: Evidence, Cita
 
 From the repo root, `python tasks.py init-env` copies `.env.example` to `.env` here when it is missing (Windows: `py tasks.py init-env`). With nothing filled in, the runtime starts on **FakeZetaris** (the four contract views as SQLite seed rows for Valencia 2024 / Ahr 2021 plus a synthetic portfolio) and **FakeNightshift** (deterministic), so the whole graph, the API and the UI work before credentials and live views exist. Fill `ZETARIS_REST_URL` / `ZETARIS_API_KEY` and `METERLESS_BASE_URL` / `METERLESS_RUNTIME_TOKEN` to go live.
 
-A shared Zetaris is already running and reachable from anywhere, so nobody needs their own:
-
-```bash
-ZETARIS_REST_URL=https://floodsense-sql.zaindroid.me/zetaris/api/v1.0
-ZETARIS_ORG_ID=1
-ZETARIS_API_KEY=<ask Zain>
-```
-
-That host forwards the one call the client makes, `sql-editor/sqls/run`, to the engine and refuses
-anything that is not a SELECT, so the key cannot write. Leave `ZETARIS_USER` and `ZETARIS_PASSWORD`
-empty: the engine's own credentials stay on its host.
-
 ```bash
 python3 -m pip install -r requirements.txt
 python3 -m unittest discover -s tests          # 20 tests, < 1 s, no network

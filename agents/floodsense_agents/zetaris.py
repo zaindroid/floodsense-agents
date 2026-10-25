@@ -13,7 +13,7 @@ Views, as in the contract; schema floodsense_seed.* or floodsense.* via
 FF_LIVE_DATA:
   hazard_timeline(point_id, ts_utc, rain_mm, discharge_m3s, warning_level)
   discharge_daily(point_id, date, discharge_m3s, source)
-  exposure_join(policy_id, site_id, lat, lon, in_footprint, sum_insured_eur, segment)
+  exposure_join(policy_id, site_id, lat, lon, in_footprint, sum_insured_eur, segment, synthetic)
   provenance(dataset, source_url, publisher, licence, attribution, fetched_at)
 The nodes use nothing else, so switching to the live views is FF_LIVE_DATA plus credentials.
 """
@@ -237,7 +237,7 @@ class ZetarisClient:
 _DDL = """
 CREATE TABLE {s}.hazard_timeline(point_id TEXT, ts_utc TEXT, rain_mm REAL, discharge_m3s REAL, warning_level TEXT);
 CREATE TABLE {s}.discharge_daily(point_id TEXT, date TEXT, discharge_m3s REAL, source TEXT);
-CREATE TABLE {s}.exposure_join(policy_id TEXT, site_id TEXT, lat REAL, lon REAL, in_footprint INTEGER, sum_insured_eur REAL, segment TEXT);
+CREATE TABLE {s}.exposure_join(policy_id TEXT, site_id TEXT, lat REAL, lon REAL, in_footprint INTEGER, sum_insured_eur REAL, segment TEXT, synthetic TEXT);
 CREATE TABLE {s}.provenance(dataset TEXT, source_url TEXT, publisher TEXT, licence TEXT, attribution TEXT, fetched_at TEXT);
 """
 
@@ -289,18 +289,19 @@ _SEED = {
         ("altenahr", "2021-07-15", 210.0, "GloFAS via Open-Meteo"),
     ],
     # Synthetic portfolio of the demo insurer around the EMSR773 footprint.
-    # in_footprint comes from the Copernicus layer.
+    # in_footprint comes from the Copernicus layer. synthetic is the book's own
+    # flag, yes on every row, as migration 018 sets it live: this is not a real book.
     "exposure_join": [
-        ("P-1001", "S-001", 39.4275, -0.4178, 1, 4_200_000, "warehouse"),
-        ("P-1002", "S-002", 39.4036, -0.4039, 1, 1_900_000, "retail"),
-        ("P-1003", "S-003", 39.4215, -0.3906, 1, 6_500_000, "retail"),
-        ("P-1004", "S-004", 39.4280, -0.3850, 1, 800_000, "retail"),
-        ("P-1005", "S-005", 39.4370, -0.4680, 1, 3_100_000, "industrial"),
-        ("P-1006", "S-006", 39.4360, -0.4350, 1, 2_400_000, "healthcare"),
-        ("P-1007", "S-007", 39.4720, -0.7200, 0, 1_200_000, "industrial"),
-        ("P-1008", "S-008", 39.4699, -0.3763, 0, 9_000_000, "office"),
-        ("P-1009", "S-009", 39.1900, -0.4350, 1, 2_700_000, "industrial"),
-        ("P-1010", "S-010", 39.4600, -0.3300, 0, 1_500_000, "hospitality"),
+        ("P-1001", "S-001", 39.4275, -0.4178, 1, 4_200_000, "warehouse", "yes"),
+        ("P-1002", "S-002", 39.4036, -0.4039, 1, 1_900_000, "retail", "yes"),
+        ("P-1003", "S-003", 39.4215, -0.3906, 1, 6_500_000, "retail", "yes"),
+        ("P-1004", "S-004", 39.4280, -0.3850, 1, 800_000, "retail", "yes"),
+        ("P-1005", "S-005", 39.4370, -0.4680, 1, 3_100_000, "industrial", "yes"),
+        ("P-1006", "S-006", 39.4360, -0.4350, 1, 2_400_000, "healthcare", "yes"),
+        ("P-1007", "S-007", 39.4720, -0.7200, 0, 1_200_000, "industrial", "yes"),
+        ("P-1008", "S-008", 39.4699, -0.3763, 0, 9_000_000, "office", "yes"),
+        ("P-1009", "S-009", 39.1900, -0.4350, 1, 2_700_000, "industrial", "yes"),
+        ("P-1010", "S-010", 39.4600, -0.3300, 0, 1_500_000, "hospitality", "yes"),
     ],
     "provenance": [
         (

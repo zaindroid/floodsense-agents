@@ -155,7 +155,13 @@ DEFINITIONS: dict[str, Definition] = {
 
 @dataclass(frozen=True)
 class Product:
-    """Rung 08. Something a named consumer can depend on."""
+    """Rung 08. Something a named consumer can depend on.
+
+    A promise to a consumer, not a claim about this process. The desk, the
+    record and the readiness report are served by the console that reads this
+    service, so readiness checks each route against the app that is running
+    rather than against this list.
+    """
 
     name: str
     route: str
