@@ -5,13 +5,15 @@ name: sync-from-monorepo
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Hourly. It was every 15 minutes, which is 96 runs a day for a mirror
+    # nothing redeploys automatically yet.
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 env:
   SOURCE_REPO: GenAI-Open-Agent-Hackathon/Hackathon-Monorepo
   # Point this at main once the agents pull request is merged.
-  SOURCE_REF: feat/agents-langgraph-hitl-judge
+  SOURCE_REF: feat/agents-live-data-integration
 
 jobs:
   sync:
@@ -22,18 +24,28 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Clone the monorepo
+        id: clone
         env:
           TOKEN: ${{ secrets.MONOREPO_TOKEN }}
         run: |
+          # Skipped rather than failed. Without a token this job cannot do
+          # anything, and failing on a schedule turned that into a red run
+          # every quarter of an hour -- noise that buries a real failure
+          # instead of reporting one. It reports the one missing thing and
+          # stops; set MONOREPO_TOKEN and it starts working with no edit here.
           if [ -z "$TOKEN" ]; then
-            echo "MONOREPO_TOKEN is unset and $SOURCE_REPO is private." >&2
-            exit 1
+            echo "MONOREPO_TOKEN is empty, so $SOURCE_REPO cannot be read."
+            echo "Nothing was mirrored. Add the secret to enable this job:"
+            echo "  a fine-grained PAT, read-only on Contents of $SOURCE_REPO"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           git clone --quiet --depth 1 --branch "$SOURCE_REF" \
             "https://x-access-token:$TOKEN@github.com/$SOURCE_REPO.git" source
 
       - name: Mirror the agents service and the ui mock
         id: mirror
+        if: steps.clone.outputs.skip != 'true'
         run: |
           rm -rf agents ui
           cp -r source/agents agents
