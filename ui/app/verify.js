@@ -105,6 +105,18 @@
 .vfy-made div:last-child{border-right:0;margin-right:0;padding-right:0}
 .vfy-made dd{margin:0;font-size:17px;font-weight:500}
 .vfy-made dt{font-size:11.5px;color:var(--soft,#5c636c);margin-top:3px}
+.vfy-lbl{margin:0 0 7px;font-size:11px;color:var(--soft,#5c636c)}
+.vfy-items{list-style:none;margin:0 0 16px;padding:0}
+.vfy-items li{display:grid;grid-template-columns:28px 1fr;gap:9px;padding:7px 0;
+  border-top:1px solid var(--rule,#dcdcd6);align-items:start}
+.vfy-items li:first-child{border-top:0;padding-top:0}
+.vfy-id{font-size:11px;color:var(--soft,#5c636c);padding-top:2px}
+.vfy-items b{display:block;font-size:13px;font-weight:400;line-height:1.45;max-width:52ch}
+.vfy-items em{display:block;font-style:normal;font-size:11.5px;color:var(--soft,#5c636c);
+  margin-top:2px}
+.vfy-cites{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.vfy-cites i{font-style:normal;font-size:10.5px;color:var(--soft,#5c636c);
+  border:1px solid var(--rule,#dcdcd6);padding:1px 5px}
 .vfy-chks{list-style:none;margin:0 0 15px;padding:0}
 .vfy-chks li{display:grid;grid-template-columns:16px 1fr;gap:9px;padding:6px 0;align-items:start}
 .vfy-tick{display:flex;margin-top:2px;color:var(--go,#40674f)}
@@ -332,6 +344,7 @@
       esc(sentence(s.does)) +
       "</p>" +
       madeHtml(s) +
+      itemsHtml(s) +
       checksHtml(s) +
       handHtml(s) +
       queriesHtml(s)
@@ -356,6 +369,36 @@
         )
         .join("") +
       "</dl>"
+    );
+  }
+
+  // What the agent actually wrote, above the checks that test it. A check
+  // saying "every claim carries a citation" is worth little if the claims
+  // and their citations are nowhere to be seen.
+  function itemsHtml(s) {
+    if (!s.items || !s.items.length) return "";
+    return (
+      '<p class="vfy-lbl">' +
+      esc(s.items_label || "what it wrote") +
+      '</p><ul class="vfy-items">' +
+      s.items
+        .map(
+          (it) =>
+            '<li><span class="vfy-id">' +
+            esc(it.id || "") +
+            "</span><span><b>" +
+            esc(it.text || "") +
+            "</b>" +
+            (it.cites && it.cites.length
+              ? '<span class="vfy-cites">' +
+                it.cites.map((c) => '<i>' + esc(c) + "</i>").join("") +
+                "</span>"
+              : "") +
+            (it.note ? "<em>" + esc(it.note) + "</em>" : "") +
+            "</span></li>"
+        )
+        .join("") +
+      "</ul>"
     );
   }
 

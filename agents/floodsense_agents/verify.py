@@ -39,6 +39,10 @@ class Step:
     latency_ms: int | None = None
     model_id: str | None = None
     produced: dict[str, Any] = field(default_factory=dict)
+    # The things themselves, for a reader who wants to see them rather than
+    # be told they are fine. {id, text, note, cites[]} per row.
+    items_label: str = ""
+    items: list[dict[str, Any]] = field(default_factory=list)
     queries: list[dict[str, Any]] = field(default_factory=list)
     checks: list[Check] = field(default_factory=list)
 
@@ -111,6 +115,16 @@ def watchers(run: dict) -> Step:
     anomalies = run.get("anomalies") or []
     s.produced = {"anomalies": len(anomalies), "provenance_rows": len(run.get("provenance") or [])}
 
+    s.items_label = "the anomalies it raised"
+    s.items = [
+        {
+            "id": a.get("id"),
+            "text": a.get("why"),
+            "note": f"{a.get('point_id')} · {a.get('value')} {a.get('unit')} · {a.get('ts_utc')}",
+        }
+        for a in anomalies
+    ]
+
     dangling = [a["id"] for a in anomalies if a.get("query_id") not in ev]
     s.checks.append(
         Check(
@@ -168,6 +182,17 @@ def investigator(run: dict) -> Step:
     hyps = run.get("hypotheses") or []
     s.produced = {"hypotheses": len(hyps), "claims": len(claims)}
 
+    s.items_label = "the claims it wrote"
+    s.items = [
+        {
+            "id": c.get("claim_id"),
+            "text": c.get("text"),
+            "cites": [x.get("citation_id") for x in c.get("citations") or []],
+            "note": ", ".join(f"{n:,.0f}" for n in c.get("numbers") or []),
+        }
+        for c in claims
+    ]
+
     bare = [c["claim_id"] for c in claims if not c.get("citations")]
     s.checks.append(
         Check(
@@ -215,6 +240,17 @@ def skeptic(run: dict) -> Step:
         "supported": sum(1 for h in hyps if h.get("status") == "supported"),
         "not_supported": sum(1 for h in hyps if h.get("status") == "not_supported"),
     }
+
+    s.items_label = "the links it tried to break"
+    s.items = [
+        {
+            "id": h.get("id"),
+            "text": h.get("statement"),
+            "cites": h.get("citations") or [],
+            "note": f"{h.get('status')} after {h.get('rounds', 0)} round(s) · {h.get('rationale')}",
+        }
+        for h in hyps
+    ]
 
     undecided = [h["id"] for h in hyps if h.get("status") == "proposed"]
     s.checks.append(
@@ -326,6 +362,17 @@ def playbook(run: dict) -> Step:
         "released": sum(1 for a in actions if a.get("released")),
     }
 
+    s.items_label = "the actions it drafted"
+    s.items = [
+        {
+            "id": a.get("action_id"),
+            "text": a.get("text"),
+            "cites": a.get("claim_ids") or [],
+            "note": f"within {a.get('horizon_h')} h" + (", outbound" if a.get("outbound") else ""),
+        }
+        for a in actions
+    ]
+
     orphan = [a["action_id"] for a in actions if not a.get("claim_ids")]
     s.checks.append(
         Check(
@@ -369,6 +416,17 @@ def judge(run: dict) -> Step:
         "overall": summary.get("overall"),
         "flagged": summary.get("flagged_claim_ids"),
     }
+
+    text_of = {c["claim_id"]: c.get("text") for c in claims}
+    s.items_label = "how it scored each claim"
+    s.items = [
+        {
+            "id": x.get("claim_id"),
+            "text": text_of.get(x.get("claim_id")) or x.get("rationale"),
+            "note": f"{x.get('grounding')} · {x.get('score')} · {x.get('rationale')}",
+        }
+        for x in scores
+    ]
 
     scored = {x.get("claim_id") for x in scores}
     unscored = sorted({c["claim_id"] for c in claims} - scored)
