@@ -71,6 +71,15 @@ ul {
   color: var(--soft);
 }
 
+/* The second one sits beside the first, which keeps the auto margin. */
+.bar .who + .who {
+  margin-left: 14px;
+}
+
+a.who:hover {
+  color: var(--river);
+}
+
 #crumbs a,
 #crumbs span {
   font-size: 13px;

@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY agents/floodsense_agents ./floodsense_agents
 # The console and the pages are this repository's own: the monorepo's agents/
 # is the graph's API and nothing else. console/ finds ui/ beside itself.
-COPY console/*.py console/console.html ./console/
+COPY console/*.py console/*.html ./console/
 COPY ui/mock ./ui/mock
 COPY ui/app ./ui/app
 

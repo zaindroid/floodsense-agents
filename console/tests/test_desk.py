@@ -23,7 +23,7 @@ os.environ.setdefault("LLM_MODE", "fake")
 from fastapi.testclient import TestClient  # noqa: E402
 
 from floodsense_agents import __main__ as service  # noqa: E402
-import console.app  # noqa: E402,F401 - registers the console's routes
+import console.app as pages  # noqa: E402 - importing it registers the console's routes
 from console import desk  # noqa: E402
 from floodsense_agents.graph import build_graph  # noqa: E402
 from floodsense_agents.nightshift import FakeNightshift  # noqa: E402
@@ -248,7 +248,7 @@ class DeskTest(unittest.TestCase):
         bare = self.c.get("/app/app.js")
         self.assertIn("no-cache", bare.headers["cache-control"])
 
-        build = service._build()
+        build = pages._build()
         pinned = self.c.get(f"/app/app.js?v={build}")
         self.assertEqual(pinned.status_code, 200)
         self.assertIn("immutable", pinned.headers["cache-control"])

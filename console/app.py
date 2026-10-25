@@ -21,10 +21,15 @@ POST /runs/{id}/dispatch        post the decision to DECISION_WEBHOOK, off unles
 GET  /readiness                 the eight foundations checked against the newest run
 GET  /mock/                     design mock, plain view for a non-specialist
 GET  /mock/analyst              design mock, analyst view
+GET  /pipeline/                 the pipeline view: the graph drawn, animated as a run happens
+POST /pipeline/runs             start a run on a worker thread, answer with its launch id
+GET  /pipeline/events           SSE: that launch's steps, queries and model calls as they land
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 from pathlib import Path
 
@@ -34,6 +39,7 @@ from fastapi.responses import (
     HTMLResponse,
     PlainTextResponse,
     RedirectResponse,
+    StreamingResponse,
 )
 
 from floodsense_agents import labelling
@@ -43,11 +49,12 @@ from floodsense_agents.models import RunRequest
 from floodsense_agents.readiness import report as readiness_report
 from floodsense_agents.settings import settings
 
-from console import desk
+from console import desk, live
 from console.verify import report as verify_report
 
 HERE = Path(__file__).resolve().parent
 CONSOLE = HERE / "console.html"
+PIPELINE = HERE / "pipeline.html"
 
 
 def _ui(folder: str):
@@ -299,3 +306,73 @@ def mock_analyst():
 @app.get("/mock/{name}", include_in_schema=False)
 def mock_asset(name: str, v: str | None = None):
     return _static(MOCK_DIR, name, version=v)
+
+
+@app.get("/pipeline", include_in_schema=False)
+def pipeline_bare():
+    return RedirectResponse("/pipeline/", status_code=308)
+
+
+@app.get("/pipeline/", include_in_schema=False)
+def pipeline_page():
+    return _page(PIPELINE.parent, PIPELINE.name)
+
+
+@app.post("/pipeline/runs", include_in_schema=False)
+def pipeline_start(body: dict | None = None):
+    """Start a run and answer at once, so the page can watch it happen."""
+    body = body or {}
+    event_id = (body.get("event_id") or "EMSR773").strip()
+    try:
+        spec(event_id)
+    except KeyError as e:
+        raise HTTPException(400, str(e).strip('"')) from e
+    req = RunRequest(
+        question=(body.get("question") or _DESK_QUESTION).strip(),
+        event_id=event_id,
+        replay_ts=body.get("replay_ts"),
+    )
+    record, fresh = live.launch(req)
+    return _live(
+        {
+            "launch_id": record["launch_id"],
+            "run_id": record["run_id"],
+            "status": record["status"],
+            "event_id": record["event_id"],
+            "question": record["question"],
+            "started": fresh,
+        }
+    )
+
+
+@app.get("/pipeline/events", include_in_schema=False)
+def pipeline_events(launch: str):
+    """One launch's events as they land.
+
+    The stream is paced by the run, not by a timer: each poll sends whatever
+    the graph has written since the last one. A comment line every 15 seconds
+    keeps proxies from closing a quiet connection, and X-Accel-Buffering tells
+    the ones that would otherwise hold the body back not to.
+    """
+    if live.get(launch) is None:
+        raise HTTPException(404, f"no launch {launch}")
+
+    async def gen():
+        yield "retry: 2000\n\n"
+        quiet = 0.0
+        for event in live.events(launch):
+            if event is None:
+                await asyncio.sleep(live.POLL_S)
+                quiet += live.POLL_S
+                if quiet >= 15:
+                    quiet = 0.0
+                    yield ": ping\n\n"
+                continue
+            quiet = 0.0
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+    )

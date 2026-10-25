@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FloodSense EU — pipeline</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* The desk's paper and ink, because this is the same application. The
+         schematic is drawn in one accent and two state colours; nothing here
+         glows, and the only motion is a mark travelling the path an event
+         actually took. */
+      :root {
+        color-scheme: light;
+        --paper: #fafaf8;
+        --ink: #1b1f24;
+        --soft: #5c636c;
+        --rule: #dcdcd6;
+        --wash: #f2f2ee;
+        --river: #35607a;
+        --hold: #9a6b1f;
+        --go: #40674f;
+        --stop: #8c3b3b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font: 15px/1.5 Archivo, "Helvetica Neue", Arial, sans-serif;
+        font-variant-numeric: tabular-nums;
+        -webkit-font-smoothing: antialiased;
+      }
+      h1,
+      h2,
+      p,
+      ol,
+      ul,
+      li {
+        margin: 0;
+        padding: 0;
+      }
+      li {
+        list-style: none;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--rule);
+        background: #fff;
+      }
+      .brand {
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .where {
+        color: var(--soft);
+      }
+      .bar .right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      select,
+      button {
+        font: inherit;
+        color: var(--ink);
+        background: #fff;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        padding: 7px 12px;
+      }
+      button.go {
+        background: var(--river);
+        border-color: var(--river);
+        color: #fff;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      button.go:disabled {
+        background: var(--wash);
+        border-color: var(--rule);
+        color: var(--soft);
+        cursor: default;
+      }
+      .state {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 10px;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--wash);
+        font-size: 13px;
+        color: var(--soft);
+      }
+      .state b {
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--soft);
+      }
+      .dot.on {
+        background: var(--river);
+      }
+      .dot.ok {
+        background: var(--go);
+      }
+      .dot.bad {
+        background: var(--stop);
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 0;
+        align-items: start;
+      }
+      .stage {
+        padding: 22px 24px 30px;
+        min-width: 0;
+      }
+      .stage h1 {
+        font-size: 19px;
+        font-weight: 600;
+      }
+      .stage .lede {
+        color: var(--soft);
+        font-size: 14px;
+        margin-top: 4px;
+        max-width: 68ch;
+      }
+      svg.map {
+        width: 100%;
+        height: auto;
+        margin-top: 18px;
+        display: block;
+      }
+      .map .plate {
+        fill: #fff;
+        stroke: var(--rule);
+      }
+      .map .plate.sys {
+        fill: var(--wash);
+      }
+      .map .num {
+        font-size: 11px;
+        fill: var(--soft);
+        letter-spacing: 0.08em;
+      }
+      .map .name {
+        font-size: 13.5px;
+        font-weight: 500;
+        fill: var(--ink);
+      }
+      .map .tag {
+        font-size: 9.5px;
+        fill: var(--soft);
+        letter-spacing: 0.14em;
+      }
+      .map .wire {
+        fill: none;
+        stroke: var(--rule);
+        stroke-width: 1.4;
+      }
+      .map .wire.bus {
+        stroke-dasharray: 3 4;
+      }
+      .map .ring {
+        fill: none;
+        stroke: var(--river);
+        stroke-width: 2;
+        opacity: 0;
+      }
+      .map .plate.live {
+        stroke: var(--river);
+      }
+      .map .plate.done {
+        stroke: var(--go);
+      }
+      .map .plate.bad {
+        stroke: var(--stop);
+      }
+      .map .count {
+        font-size: 11px;
+        fill: var(--river);
+      }
+      aside {
+        border-left: 1px solid var(--rule);
+        background: #fff;
+        min-height: calc(100vh - 57px);
+        padding: 22px 20px;
+      }
+      aside h2 {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        color: var(--soft);
+      }
+      .tally {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        margin: 12px 0 26px;
+      }
+      .tally div {
+        background: #fff;
+        padding: 10px 12px;
+      }
+      .tally span {
+        display: block;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--soft);
+      }
+      .tally b {
+        font-size: 21px;
+        font-weight: 500;
+      }
+      .feed {
+        margin-top: 12px;
+        max-height: calc(100vh - 360px);
+        overflow: auto;
+      }
+      .feed li {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--rule);
+        font-size: 13px;
+        display: grid;
+        grid-template-columns: 46px 1fr;
+        gap: 10px;
+      }
+      .feed .t {
+        color: var(--soft);
+        font-size: 12px;
+      }
+      .feed .who {
+        font-weight: 500;
+      }
+      .feed .what {
+        color: var(--soft);
+      }
+      .feed .n {
+        color: var(--river);
+        font-size: 12px;
+      }
+      .feed li.err .what {
+        color: var(--stop);
+      }
+      .foot {
+        padding: 0 24px 28px;
+        color: var(--soft);
+        font-size: 12.5px;
+        max-width: 92ch;
+      }
+      .foot a {
+        color: var(--river);
+      }
+      @media (max-width: 960px) {
+        main {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        aside {
+          border-left: 0;
+          border-top: 1px solid var(--rule);
+          min-height: 0;
+        }
+        .feed {
+          max-height: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .map .ring {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="brand" href="/app/">FloodSense EU</a>
+      <span class="where">Pipeline</span>
+      <div class="right">
+        <span class="state" id="state"><i class="dot"></i> <b>idle</b></span>
+        <select id="event" aria-label="Event"></select>
+        <button class="go" id="run">Run analysis</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="stage">
+        <h1>The graph, while it runs</h1>
+        <p class="lede">
+          Every mark below is an event the run wrote: a query that came back, a model
+          call that was made, a stage that finished. The animation is paced so it can
+          be read; the server time in the panel is the real one.
+        </p>
+        <svg class="map" id="map" viewBox="0 0 1180 390" role="img"
+             aria-label="The agent pipeline, drawn as it runs"></svg>
+      </section>
+
+      <aside>
+        <h2>This run</h2>
+        <div class="tally">
+          <div><span>STAGES</span><b id="n-steps">0</b></div>
+          <div><span>QUERIES</span><b id="n-queries">0</b></div>
+          <div><span>ROWS READ</span><b id="n-rows">0</b></div>
+          <div><span>MODEL CALLS</span><b id="n-models">0</b></div>
+          <div><span>SERVER TIME</span><b id="n-time">—</b></div>
+          <div><span>DATA PATH</span><b id="n-path">—</b></div>
+        </div>
+        <h2>Event log</h2>
+        <ul class="feed" id="feed"></ul>
+      </aside>
+    </main>
+
+    <p class="foot" id="foot">
+      Nothing here is drawn from a script. The page opens a stream, the run publishes
+      a step as it completes it, and an empty run draws nothing. A finished run is
+      auditable in full on the <a href="/app/">duty desk</a>.
+    </p>
+
+    <script>
+      "use strict";
+
+      // Trace order, which is also the order the graph runs in. hitl is a
+      // system rather than an agent: a person answers it.
+      const STAGES = [
+        { key: "scope", name: "Scope gate", kind: "sys" },
+        { key: "watchers", name: "Hazard scan", kind: "agent" },
+        { key: "investigator", name: "Investigator", kind: "agent" },
+        { key: "skeptic", name: "Skeptic", kind: "agent" },
+        { key: "exposure", name: "Exposure join", kind: "agent" },
+        { key: "playbook", name: "Playbook", kind: "agent" },
+        { key: "judge", name: "Judge", kind: "agent" },
+        { key: "hitl", name: "Approval", kind: "sys" },
+      ];
+      // Two systems every stage may reach, over one bus rather than sixteen
+      // crossing wires.
+      const SYSTEMS = {
+        views: { name: "Contract views", sub: "Zetaris", x: 150 },
+        model: { name: "Model lanes", sub: "Nightshift", x: 730 },
+      };
+
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const map = document.getElementById("map");
+      const feed = document.getElementById("feed");
+      const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      const el = (name, attrs, parent) => {
+        const node = document.createElementNS(SVG_NS, name);
+        for (const k in attrs) node.setAttribute(k, attrs[k]);
+        (parent || map).appendChild(node);
+        return node;
+      };
+      const text = (x, y, s, cls, parent) => {
+        const t = el("text", { x: x, y: y, class: cls, "text-anchor": "middle" }, parent);
+        t.textContent = s;
+        return t;
+      };
+
+      // ---- the schematic -------------------------------------------------
+      const SYS_Y = 40;
+      const SYS_H = 72;
+      const BUS_Y = 152;
+      const ROW_Y = 212;
+      const PLATE_H = 76;
+      const PLATE_W = 118;
+      const PITCH = 140;
+      const X0 = 41;
+      const nodes = {};
+      const routes = {};
+      const hidden = el("g", { opacity: "0" });
+
+      function plate(id, x, y, w, h, label, sub, kind, index) {
+        const g = el("g", {});
+        const r = kind === "agent" ? 12 : 2;
+        const box = el(
+          "rect",
+          { x: x, y: y, width: w, height: h, rx: r, class: "plate" + (kind === "sys" ? " sys" : "") },
+          g
+        );
+        const cx = x + w / 2;
+        if (index) text(cx, y + 20, index, "num", g);
+        text(cx, y + (index ? 40 : 32), label, "name", g);
+        text(cx, y + (index ? 56 : 48), sub, "tag", g);
+        const ring = el(
+          "rect",
+          { x: x - 5, y: y - 5, width: w + 10, height: h + 10, rx: r + 5, class: "ring" },
+          g
+        );
+        nodes[id] = { box: box, ring: ring, cx: cx, cy: y + h / 2, x: x, y: y, w: w, h: h, g: g };
+        return nodes[id];
+      }
+
+      function draw() {
+        // the bus the stages reach the systems over
+        el("path", { d: `M ${X0 + 59} ${BUS_Y} H ${X0 + 7 * PITCH + 59}`, class: "wire bus" });
+
+        for (const key in SYSTEMS) {
+          const s = SYSTEMS[key];
+          plate(key, s.x, SYS_Y, 200, SYS_H, s.name, s.sub.toUpperCase(), "sys");
+          el("path", { d: `M ${s.x + 100} ${SYS_Y + SYS_H} V ${BUS_Y}`, class: "wire" });
+        }
+
+        STAGES.forEach((stage, i) => {
+          const x = X0 + i * PITCH;
+          plate(
+            stage.key,
+            x,
+            ROW_Y,
+            PLATE_W,
+            PLATE_H,
+            stage.name,
+            stage.kind === "agent" ? "AGENT" : "SYSTEM",
+            stage.kind,
+            String(i + 1).padStart(2, "0")
+          );
+          // stub up to the bus
+          el("path", { d: `M ${x + PLATE_W / 2} ${ROW_Y} V ${BUS_Y}`, class: "wire" });
+          if (i) {
+            const prev = X0 + (i - 1) * PITCH + PLATE_W;
+            el("path", { d: `M ${prev} ${ROW_Y + PLATE_H / 2} H ${x}`, class: "wire" });
+            routes["step:" + stage.key] = path(
+              `M ${prev} ${ROW_Y + PLATE_H / 2} H ${x}`
+            );
+          }
+        });
+
+        // the skeptic's revise edge back to the investigator, drawn as the
+        // loop it is rather than as another forward arrow
+        const sk = nodes.skeptic;
+        const inv = nodes.investigator;
+        const loop = `M ${sk.cx} ${ROW_Y + PLATE_H} C ${sk.cx} 330, ${inv.cx} 330, ${inv.cx} ${ROW_Y + PLATE_H}`;
+        el("path", { d: loop, class: "wire" });
+        routes["revise"] = path(loop);
+        text((sk.cx + inv.cx) / 2, 350, "revise", "tag");
+
+        // one route per stage and system, over the bus
+        STAGES.forEach((stage) => {
+          const n = nodes[stage.key];
+          for (const key in SYSTEMS) {
+            const s = nodes[key];
+            routes[stage.key + ">" + key] = path(
+              `M ${n.cx} ${ROW_Y} V ${BUS_Y} H ${s.cx} V ${s.y + s.h}`
+            );
+          }
+        });
+        map.appendChild(hidden);
+      }
+
+      function path(d) {
+        const p = el("path", { d: d, fill: "none", stroke: "none" }, hidden);
+        return p;
+      }
+
+      // ---- motion --------------------------------------------------------
+      function shoot(route, colour) {
+        const p = routes[route];
+        if (!p || reduced) return;
+        const len = p.getTotalLength();
+        const mark = el("circle", { r: 3.6, fill: colour, cx: 0, cy: 0 });
+        const t0 = performance.now();
+        const ms = 520;
+        function step(now) {
+          const k = Math.min(1, (now - t0) / ms);
+          const pt = p.getPointAtLength(len * k);
+          mark.setAttribute("cx", pt.x);
+          mark.setAttribute("cy", pt.y);
+          if (k < 1) requestAnimationFrame(step);
+          else mark.remove();
+        }
+        requestAnimationFrame(step);
+      }
+
+      function flash(key, cls) {
+        const n = nodes[key];
+        if (!n) return;
+        if (cls) {
+          n.box.classList.remove("live", "done", "bad");
+          n.box.classList.add(cls);
+        }
+        if (reduced) return;
+        n.ring.animate(
+          [
+            { opacity: 0.9, strokeWidth: 2 },
+            { opacity: 0, strokeWidth: 7 },
+          ],
+          { duration: 620, easing: "ease-out" }
+        );
+      }
+
+      // ---- counters and log ----------------------------------------------
+      const tally = { steps: 0, queries: 0, rows: 0, models: 0 };
+      const put = (id, v) => (document.getElementById(id).textContent = v);
+      const setState = (word, cls) => {
+        const s = document.getElementById("state");
+        s.innerHTML = '<i class="dot ' + (cls || "") + '"></i> <b></b>';
+        s.querySelector("b").textContent = word;
+      };
+
+      function log(ms, who, what, bad, key) {
+        // The skeptic really does ask the same view ten times. Ten identical
+        // lines say less than one line carrying the count.
+        const top = feed.firstChild;
+        if (key && top && top.dataset.key === key) {
+          const n = Number(top.dataset.n || 1) + 1;
+          top.dataset.n = n;
+          top.querySelector(".n").textContent = " x" + n;
+          return;
+        }
+        const li = document.createElement("li");
+        li.dataset.key = key || "";
+        if (bad) li.className = "err";
+        const t = document.createElement("span");
+        t.className = "t";
+        t.textContent = ms < 1000 ? Math.round(ms) + "ms" : (ms / 1000).toFixed(1) + "s";
+        const body = document.createElement("span");
+        const w = document.createElement("span");
+        w.className = "who";
+        w.textContent = who;
+        const d = document.createElement("span");
+        d.className = "what";
+        d.textContent = " " + what;
+        const n = document.createElement("span");
+        n.className = "n";
+        body.append(w, d, n);
+        li.append(t, body);
+        feed.prepend(li);
+        while (feed.children.length > 60) feed.lastChild.remove();
+      }
+
+      // ---- one event -----------------------------------------------------
+      // Stages finish in order, so the node running now is the one after the
+      // last to report. That is who the queries and model calls belong to.
+      let DONE_TO = -1;
+      const running = () => STAGES[Math.min(DONE_TO + 1, STAGES.length - 1)].key;
+
+      function onEvent(ev) {
+        if (ev.type === "run") {
+          if (ev.status === "running") {
+            put("n-path", ev.served_from || "—");
+            setState("running", "on");
+            log(ev.t, "run", ev.run_id + " started");
+          }
+          return;
+        }
+        if (ev.type === "query") {
+          tally.queries += 1;
+          tally.rows += Number(ev.rows || 0);
+          put("n-queries", tally.queries);
+          put("n-rows", tally.rows.toLocaleString("en-GB"));
+          shoot(running() + ">views", ev.error ? "#8c3b3b" : "#35607a");
+          flash("views", ev.error ? "bad" : "live");
+          log(
+            ev.t,
+            "Contract views",
+            ev.error ? ev.view + " failed: " + ev.error : ev.view + " — " + (ev.rows || 0) + " rows",
+            Boolean(ev.error),
+            ev.error ? null : "q:" + ev.view
+          );
+          return;
+        }
+        if (ev.type === "model") {
+          tally.models += 1;
+          put("n-models", tally.models);
+          shoot(running() + ">model", "#35607a");
+          flash("model", "live");
+          log(ev.t, "Model lanes", ev.model_id, false, "m:" + ev.model_id);
+          return;
+        }
+        if (ev.type === "step") {
+          const key = ev.agent === "revise" ? "skeptic" : ev.agent;
+          const at = STAGES.findIndex((st) => st.key === key);
+          if (at > DONE_TO) DONE_TO = at;
+          tally.steps += 1;
+          put("n-steps", tally.steps);
+          if (ev.agent === "revise") shoot("revise", "#9a6b1f");
+          else shoot("step:" + key, "#35607a");
+          flash(key, "done");
+          log(ev.t, ev.title || key, ev.summary || "", false);
+          return;
+        }
+        if (ev.type === "done") {
+          const ok = ev.status === "awaiting_approval" || ev.status === "approved";
+          setState(ev.status.replace(/_/g, " "), ok ? "ok" : "bad");
+          if (ev.elapsed_ms) put("n-time", (ev.elapsed_ms / 1000).toFixed(1) + "s");
+          if (ev.status === "awaiting_approval") flash("hitl", "live");
+          log(ev.t, "run", ev.error || ev.status.replace(/_/g, " "));
+          document.getElementById("run").disabled = false;
+          if (ev.run_id) {
+            const f = document.getElementById("foot");
+            const a = document.createElement("a");
+            a.href = "/runs/" + ev.run_id + "/record";
+            a.textContent = "Open this run's decision record";
+            f.append(document.createTextNode(" "), a);
+          }
+          return;
+        }
+        if (ev.type === "error") log(0, "stream", ev.error, true);
+      }
+
+      // ---- the stream, drained at reading speed --------------------------
+      const Q = [];
+      let draining = false;
+
+      function drain() {
+        if (!Q.length) {
+          draining = false;
+          return;
+        }
+        draining = true;
+        // More per tick when the queue is long, so a fast run does not take
+        // minutes to show and a slow one does not fall behind.
+        const take = Q.length > 40 ? 4 : Q.length > 12 ? 2 : 1;
+        for (let i = 0; i < take && Q.length; i += 1) onEvent(Q.shift());
+        setTimeout(drain, 130);
+      }
+
+      function listen(launchId) {
+        const es = new EventSource("/pipeline/events?launch=" + encodeURIComponent(launchId));
+        es.onmessage = (m) => {
+          let ev;
+          try {
+            ev = JSON.parse(m.data);
+          } catch (e) {
+            return;
+          }
+          Q.push(ev);
+          if (!draining) drain();
+          if (ev.type === "done") es.close();
+        };
+        es.onerror = () => {
+          // The server closes the stream when the run is over, which arrives
+          // here as an error. Only say so if the run never reported.
+          if (!Q.length && tally.steps === 0) log(0, "stream", "connection lost", true);
+          es.close();
+        };
+      }
+
+      async function start() {
+        const button = document.getElementById("run");
+        button.disabled = true;
+        feed.innerHTML = "";
+        DONE_TO = -1;
+        tally.steps = tally.queries = tally.rows = tally.models = 0;
+        ["n-steps", "n-queries", "n-rows", "n-models"].forEach((id) => put(id, 0));
+        put("n-time", "—");
+        put("n-path", "—");
+        Object.values(nodes).forEach((n) => n.box.classList.remove("live", "done", "bad"));
+        setState("starting", "on");
+        try {
+          const r = await fetch("/pipeline/runs", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ event_id: document.getElementById("event").value }),
+          });
+          const body = await r.json();
+          if (!r.ok) throw new Error(body.detail || r.status);
+          if (!body.started) log(0, "run", "attached to the run already in flight");
+          listen(body.launch_id);
+        } catch (e) {
+          setState("failed", "bad");
+          log(0, "run", String(e.message || e), true);
+          button.disabled = false;
+        }
+      }
+
+      async function events() {
+        const sel = document.getElementById("event");
+        let list = ["EMSR773"];
+        try {
+          const cfg = await (await fetch("/config")).json();
+          if (Array.isArray(cfg.events) && cfg.events.length) list = cfg.events;
+        } catch (e) {
+          /* the default is enough to run */
+        }
+        sel.innerHTML = "";
+        list.forEach((id) => {
+          const o = document.createElement("option");
+          o.value = o.textContent = id;
+          sel.appendChild(o);
+        });
+      }
+
+      draw();
+      events();
+      document.getElementById("run").addEventListener("click", start);
+    </script>
+  </body>
+</html>
