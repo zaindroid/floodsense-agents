@@ -187,7 +187,20 @@ def investigator(run: dict) -> Step:
         {
             "id": c.get("claim_id"),
             "text": c.get("text"),
-            "cites": [x.get("citation_id") for x in c.get("citations") or []],
+            # The citation itself, not its id: which contract view the row came
+            # from (layer a) and which published dataset stands behind it
+            # (layer b). An id like "C1-a1" answers nothing a reader asked.
+            "cites": [
+                {
+                    "layer": x.get("layer"),
+                    "title": x.get("title"),
+                    "publisher": x.get("publisher"),
+                    "url": x.get("source_url"),
+                    "licence": x.get("licence"),
+                    "query_id": x.get("query_id"),
+                }
+                for x in c.get("citations") or []
+            ],
             "note": ", ".join(f"{n:,.0f}" for n in c.get("numbers") or []),
         }
         for c in claims
@@ -675,6 +688,10 @@ def report(run: dict | None) -> dict[str, Any]:
             "repair_rounds": run.get("repair_rounds", 0),
         },
         "data_path": data_path(run),
+        # Where the data behind this run was published, read from the
+        # provenance contract view. The panel shows it once for the run
+        # rather than repeating a licence on every claim.
+        "sources": run.get("provenance") or [],
         "verified": sum(1 for s in steps if s["status"] == "verified"),
         "of": len(steps),
         "checks_passed": sum(1 for c in checks if c["ok"]),

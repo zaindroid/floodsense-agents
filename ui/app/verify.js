@@ -117,6 +117,17 @@
 .vfy-cites{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
 .vfy-cites i{font-style:normal;font-size:10.5px;color:var(--soft,#5c636c);
   border:1px solid var(--rule,#dcdcd6);padding:1px 5px}
+.vfy-srcs{list-style:none;margin:5px 0 0;padding:0}
+.vfy-srcs li{display:grid;grid-template-columns:78px 1fr;gap:9px;padding:4px 0;font-size:11.5px;
+  color:var(--soft,#5c636c);align-items:baseline}
+.vfy-srcs a{color:var(--river,#35607a)}
+.vfy-srcs b{font-weight:400;color:var(--ink,#1b1f24)}
+.vfy-srcs em{display:block;font-style:normal;font-size:11px;color:#8c9299;margin-top:1px}
+.vfy-prov{margin:0;padding:11px 22px 13px;border-bottom:1px solid var(--rule,#dcdcd6)}
+.vfy-prov>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
+  font-size:12.5px;color:var(--soft,#5c636c)}
+.vfy-prov>summary::-webkit-details-marker{display:none}
+.vfy-prov>summary svg{color:#b6b6b0}
 .vfy-chks{list-style:none;margin:0 0 15px;padding:0}
 .vfy-chks li{display:grid;grid-template-columns:16px 1fr;gap:9px;padding:6px 0;align-items:start}
 .vfy-tick{display:flex;margin-top:2px;color:var(--go,#40674f)}
@@ -288,7 +299,36 @@
       (p.queries || 0) +
       " queries over " +
       fmtN(p.rows || 0) +
-      " rows</span></p>"
+      " rows</span></p>" +
+      sourcesHtml()
+    );
+  }
+
+  // Where the data was published. One list for the run, rather than a licence
+  // repeated on every claim.
+  function sourcesHtml() {
+    const rows = data.sources || [];
+    if (!rows.length) return "";
+    return (
+      '<details class="vfy-prov"><summary>' +
+      svg(CHEVRON, 14) +
+      rows.length +
+      " sources this run read</summary><ul class=\"vfy-srcs\">" +
+      rows
+        .map(
+          (r) =>
+            "<li><span>" +
+            esc(r.publisher || "unknown publisher") +
+            "</span><span>" +
+            (r.source_url
+              ? '<a href="' + esc(r.source_url) + '" target="_blank" rel="noopener">' +
+                esc(r.dataset || r.source_url) + "</a>"
+              : "<b>" + esc(r.dataset || "") + "</b>") +
+            (r.licence ? "<em>" + esc(r.licence) + "</em>" : "") +
+            "</span></li>"
+        )
+        .join("") +
+      "</ul></details>"
     );
   }
 
@@ -389,14 +429,47 @@
             "</span><span><b>" +
             esc(it.text || "") +
             "</b>" +
-            (it.cites && it.cites.length
-              ? '<span class="vfy-cites">' +
-                it.cites.map((c) => '<i>' + esc(c) + "</i>").join("") +
-                "</span>"
-              : "") +
+            (it.cites && it.cites.length ? citesHtml(it.cites) : "") +
             (it.note ? "<em>" + esc(it.note) + "</em>" : "") +
             "</span></li>"
         )
+        .join("") +
+      "</ul>"
+    );
+  }
+
+  // Two kinds of reference. A claim cites a source: which contract view the
+  // row came from, and which published dataset stands behind it. An action or
+  // a link cites a claim, by id. Neither should print as a bare code.
+  function citesHtml(cites) {
+    if (typeof cites[0] === "string") {
+      return (
+        '<span class="vfy-cites">rests on' +
+        cites.map((c) => "<i>" + esc(c) + "</i>").join("") +
+        "</span>"
+      );
+    }
+    return (
+      '<ul class="vfy-srcs">' +
+      cites
+        .map((c) => {
+          const name = c.publisher || c.title || "unnamed source";
+          const where = c.layer === "a" ? "read from" : "published by";
+          const q = c.query_id ? " · query " + esc(String(c.query_id).slice(0, 8)) : "";
+          return (
+            "<li><span>" +
+            esc(where) +
+            "</span><span>" +
+            (c.url
+              ? '<a href="' + esc(c.url) + '" target="_blank" rel="noopener">' +
+                esc(name) + "</a>"
+              : "<b>" + esc(name) + "</b>") +
+            (c.publisher && c.title ? " — " + esc(c.title) : "") +
+            q +
+            (c.licence ? '<em>' + esc(c.licence) + "</em>" : "") +
+            "</span></li>"
+          );
+        })
         .join("") +
       "</ul>"
     );
