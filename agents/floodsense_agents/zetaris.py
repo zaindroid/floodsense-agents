@@ -94,6 +94,20 @@ class Zetaris(Protocol):
     def run_sql(self, sql: str) -> Evidence: ...
 
 
+def _token_rejected(r: httpx.Response) -> bool:
+    """Whether to log in again and retry.
+
+    Measured against the engine, because it is not what the status code
+    suggests: an expired token comes back 400 {"msg":"Not Allowed"}, and only
+    a missing Authorization header is 401. A rejected statement is 400 too,
+    so the body has to be read to tell a dead token from bad SQL -- retrying
+    bad SQL would just double the wait before the same error.
+    """
+    if r.status_code in (401, 403):
+        return True
+    return r.status_code == 400 and "not allowed" in r.text.lower()
+
+
 class ZetarisClient:
     def __init__(self) -> None:
         self.rest = (settings.zetaris_rest_url or "").rstrip("/")
@@ -134,7 +148,7 @@ class ZetarisClient:
                         "X-Request-ID": str(uuid.uuid4()),
                     },
                 )
-                if attempt == 0 and not settings.zetaris_api_key and r.status_code in (401, 403):
+                if attempt == 0 and not settings.zetaris_api_key and _token_rejected(r):
                     self._token = None
                     continue
                 if not r.is_success:
