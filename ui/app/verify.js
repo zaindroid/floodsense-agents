@@ -1,150 +1,140 @@
-// Agent trace. A separate overlay from the readiness staircase: that one
-// asks whether the foundations hold, this one asks whether each agent did
-// what it says it did, step by step, and which data path it used.
+// Agent trace. Opened with window.showWorking(runId, agent) from the chain on
+// the case screen. Everything shown comes from /runs/{id}/verify; if that
+// cannot be read, it says so and draws nothing.
 //
-// It is styled as its own surface rather than in the app's paper, because it
-// is not part of the app: the app is what a reviewer reads and signs, this is
-// the instrument they audit it with.
-//
-// Opened with window.showWorking(runId). Everything shown comes from
-// /runs/{id}/verify; if that cannot be read, it says so and draws nothing.
+// It is a layer over the case rather than a screen of its own, so it keeps the
+// app's paper and type and docks to the edge, leaving the case in view. One
+// step opens at a time: a reviewer reads one step at a time, and the panel at
+// rest is seven lines, not seven screens of prose.
 (function () {
   "use strict";
 
-  const WORD = {
-    verified: "verified",
-    partial: "partly verified",
-    failed: "not verified",
-    "not reached": "not reached",
-    unknown: "no checks",
+  const svg = (body, size) =>
+    '<svg viewBox="0 0 20 20" width="' +
+    (size || 18) +
+    '" height="' +
+    (size || 18) +
+    '" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true">' +
+    body +
+    "</svg>";
+
+  // One mark per agent, drawn from what the agent does.
+  const ICON = {
+    watchers: '<path d="M3 15a7 7 0 0 1 14 0"/><path d="M6.5 15a3.5 3.5 0 0 1 7 0"/>' +
+      '<circle cx="10" cy="15" r=".9"/>',
+    investigator: '<circle cx="9" cy="9" r="5"/><path d="M12.8 12.8 17 17"/>',
+    skeptic: '<path d="M3.5 7.5h10l-2.5-2.5"/><path d="M16.5 12.5h-10l2.5 2.5"/>',
+    exposure: '<circle cx="8" cy="10" r="4.6"/><circle cx="12" cy="10" r="4.6"/>',
+    playbook: '<rect x="4" y="3.5" width="12" height="13" rx="1.5"/>' +
+      '<path d="M7 7.5h6M7 10.5h6M7 13.5h3.5"/>',
+    judge: '<path d="M10 4.5v11"/><path d="M4.5 7.5h11"/><path d="M4.5 7.5 2.5 12h4z"/>' +
+      '<path d="M15.5 7.5 13.5 12h4z"/><path d="M7 16h6"/>',
+    hitl: '<circle cx="10" cy="7" r="2.6"/><path d="M4.5 16c0-3 2.5-4.6 5.5-4.6s5.5 1.6 5.5 4.6"/>',
   };
+  const TICK = '<path d="M4 10.5 8 14.5 16 6"/>';
+  const CROSS = '<path d="M5.5 5.5 14.5 14.5M14.5 5.5 5.5 14.5"/>';
+  const CHEVRON = '<path d="M6.5 8.5 10 12l3.5-3.5"/>';
+  const STORE = '<ellipse cx="10" cy="5.5" rx="6" ry="2.5"/>' +
+    '<path d="M4 5.5v9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-9"/>';
+  const ARROW = '<path d="M3.5 10h13l-3.5-3.5M16.5 10 13 13.5"/>';
+  const LOOP = '<path d="M16 10a6 6 0 1 1-2-4.5"/><path d="M16.5 3v3.5H13"/>';
+  const TRACE = '<path d="M3 15.5h4l3-11 3 7 2-3h2"/>';
 
   const css = `
-/* Its own surface, on purpose. The app is paper: light, Archivo, hairline
-   rules, prose a person signs. This is the instrument behind the paper, so it
-   takes a dark ground and a monospace face, and docks to the edge instead of
-   sitting in the middle, which keeps the case visible underneath it. */
-.vfy-scrim{position:fixed;inset:0;z-index:9999;background:rgba(10,12,15,.4);
+.vfy-scrim{position:fixed;inset:0;z-index:9999;background:rgba(27,31,36,.3);
   display:flex;justify-content:flex-end}
 .vfy-scrim[hidden]{display:none}
-.vfy{--vf-g:#15181c;--vf-r:#1c2026;--vf-l:#2c323a;--vf-t:#e7e7e3;--vf-dim:#949ba5;
-  --vf-faint:#646c77;--vf-ok:#78a383;--vf-hold:#c69c52;--vf-no:#c4736e;--vf-cool:#7795b0;
-  background:var(--vf-g);color:var(--vf-t);width:min(880px,100%);height:100%;overflow:auto;
-  border-left:1px solid #000;box-shadow:-24px 0 48px rgba(0,0,0,.28);
-  font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-  font-variant-numeric:tabular-nums;animation:vfyDock .28s cubic-bezier(.2,.7,.3,1) both}
+.vfy{background:#fff;color:var(--ink,#1b1f24);width:min(600px,100%);height:100%;overflow:auto;
+  border-left:1px solid var(--ink,#1b1f24);
+  font:15px/1.5 Archivo,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:tabular-nums;
+  animation:vfyDock .3s cubic-bezier(.2,.7,.3,1) both}
 .vfy *{box-sizing:border-box}
-.vfy :focus-visible{outline:1px solid var(--vf-cool);outline-offset:2px}
+.vfy :focus-visible{outline:2px solid var(--river,#35607a);outline-offset:-2px}
 
-/* Chrome: what this is, which run, and the run's own counters. */
-.vfy-chrome{position:sticky;top:0;z-index:3;background:var(--vf-g);
-  border-bottom:1px solid var(--vf-l)}
-.vfy-head{display:flex;align-items:baseline;gap:12px;padding:13px 18px 11px}
-.vfy-head h2{margin:0;font-size:13px;font-weight:500;color:var(--vf-t)}
-.vfy-head h2 span{color:var(--vf-faint);font-weight:400}
-.vfy-id{margin-left:auto;font-size:11.5px;color:var(--vf-faint)}
-.vfy-x{font:inherit;font-size:12px;background:none;border:1px solid var(--vf-l);
-  color:var(--vf-dim);padding:3px 9px;cursor:pointer}
-.vfy-x:hover{color:var(--vf-t);border-color:var(--vf-dim)}
-.vfy-stat{display:flex;flex-wrap:wrap;margin:0;border-top:1px solid var(--vf-l)}
-.vfy-stat div{display:flex;flex-direction:column;padding:8px 16px;
-  border-right:1px solid var(--vf-l)}
-.vfy-stat div:last-child{border-right:0}
-.vfy-stat dt{order:2;font-size:10.5px;color:var(--vf-faint)}
-.vfy-stat dd{margin:0;font-size:15px;color:var(--vf-t)}
-.vfy-stat dd.hold{color:var(--vf-hold)}
-.vfy-meter{height:2px;margin:0;background:var(--vf-l);position:relative}
-.vfy-meter i{position:absolute;top:0;bottom:0;left:0;background:var(--vf-ok);
-  transform-origin:left;animation:vfyDraw .85s cubic-bezier(.2,.7,.3,1) .1s both}
-.vfy-meter i.short{background:var(--vf-hold)}
+.vfy-top{display:flex;align-items:center;gap:10px;padding:15px 22px;position:sticky;top:0;
+  background:#fff;border-bottom:1px solid var(--ink,#1b1f24);z-index:2}
+.vfy-top h2{margin:0;font-size:15px;font-weight:500;display:flex;align-items:center;gap:9px}
+.vfy-top h2 svg{color:var(--soft,#5c636c)}
+.vfy-run{margin-left:auto;font-size:12px;color:var(--soft,#5c636c)}
+.vfy-x{display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;
+  border:1px solid var(--rule,#dcdcd6);background:none;color:var(--soft,#5c636c);cursor:pointer}
+.vfy-x:hover{color:var(--ink,#1b1f24);border-color:var(--soft,#5c636c)}
 
-.vfy-path{margin:16px 18px 0;padding:11px 13px;background:var(--vf-r);
-  border-left:2px solid var(--vf-ok);font-size:12.5px;line-height:1.55;color:var(--vf-dim)}
-.vfy-path.off{border-left-color:var(--vf-hold)}
-.vfy-path b{display:block;color:var(--vf-t);margin-bottom:2px}
-.vfy-path dl{display:flex;flex-wrap:wrap;margin:10px 0 0;font-size:11.5px}
-.vfy-path dl div{display:flex;gap:6px;padding-right:12px;margin-right:12px;
-  border-right:1px solid var(--vf-l)}
-.vfy-path dl div:last-child{border-right:0;margin-right:0;padding-right:0}
-.vfy-path dt{color:var(--vf-faint)}
-.vfy-path dd{margin:0;color:var(--vf-t)}
+.vfy-figs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;margin:0}
+.vfy-figs div{display:flex;flex-direction:column;padding:16px 22px;
+  border-left:1px solid var(--rule,#dcdcd6)}
+.vfy-figs div:first-child{border-left:0}
+.vfy-figs dd{margin:0;font-size:24px;font-weight:500;letter-spacing:-.02em;line-height:1.1}
+.vfy-figs dt{font-size:12px;color:var(--soft,#5c636c);margin-top:5px}
+.vfy-meter{height:2px;background:var(--rule,#dcdcd6);position:relative}
+.vfy-meter i{position:absolute;top:0;bottom:0;left:0;background:var(--go,#40674f);
+  transform-origin:left;animation:vfyDraw .8s cubic-bezier(.2,.7,.3,1) .12s both}
+.vfy-meter i.short{background:var(--hold,#9a6b1f)}
+.vfy-src{display:flex;align-items:center;gap:9px;margin:0;padding:13px 22px;font-size:12.5px;
+  color:var(--soft,#5c636c);border-bottom:1px solid var(--rule,#dcdcd6)}
+.vfy-src svg{flex:none;color:var(--hold,#9a6b1f)}
+.vfy-src.live svg{color:var(--go,#40674f)}
 
-.vfy-body{display:grid;grid-template-columns:minmax(0,232px) minmax(0,1fr);gap:0 24px;
-  padding:16px 18px 28px}
-.vfy-pipe{list-style:none;margin:0;padding:0}
-.vfy-pipe li{margin:0}
-.vfy-flowhead{font-size:11px;color:var(--vf-faint);margin:0 0 9px;line-height:1.5}
+.vfy-steps{list-style:none;margin:0;padding:0}
+.vfy-step{border-bottom:1px solid var(--rule,#dcdcd6)}
+.vfy-row{display:grid;grid-template-columns:21px 20px 1fr auto 16px;align-items:center;gap:11px;
+  width:100%;padding:13px 22px;font:inherit;text-align:left;background:none;border:0;
+  cursor:pointer;animation:vfyIn .3s cubic-bezier(.2,.7,.3,1) both;animation-delay:var(--d)}
+.vfy-row:hover,.vfy-row[aria-expanded=true]{background:var(--wash,#f2f2ee)}
+.vfy-ix{font-size:11px;color:#a4a49e}
+.vfy-ic{display:flex;color:var(--soft,#5c636c)}
+.vfy-step.verified .vfy-ic{color:var(--go,#40674f)}
+.vfy-step.partial .vfy-ic,.vfy-step.awaiting .vfy-ic{color:var(--hold,#9a6b1f)}
+.vfy-step.failed .vfy-ic{color:var(--stop,#8c3b3b)}
+.vfy-step.notreached .vfy-ic{color:#b6b6b0}
+.vfy-nm{font-size:14px}
+.vfy-ct{font-size:12px;color:var(--soft,#5c636c)}
+.vfy-step.verified .vfy-ct{color:var(--go,#40674f)}
+.vfy-step.failed .vfy-ct{color:var(--stop,#8c3b3b)}
+.vfy-step.notreached .vfy-ct{color:#b6b6b0}
+.vfy-cv{display:flex;color:#b6b6b0;transition:transform .18s ease}
+.vfy-row[aria-expanded=true] .vfy-cv{transform:rotate(180deg)}
 
-.vfy-agent{display:flex;align-items:center;gap:9px;width:100%;text-align:left;font:inherit;
-  cursor:pointer;border:0;border-left:2px solid var(--vf-l);background:var(--vf-r);
-  color:var(--vf-dim);padding:8px 10px;margin:0 0 1px;
-  animation:vfyIn .28s cubic-bezier(.2,.7,.3,1) both;animation-delay:var(--d)}
-.vfy-agent:hover{background:#22272e;color:var(--vf-t)}
-.vfy-agent[aria-current=true]{background:#262c34;color:var(--vf-t)}
-.vfy-agent.verified{border-left-color:var(--vf-ok)}
-.vfy-agent.partial{border-left-color:var(--vf-hold)}
-.vfy-agent.failed{border-left-color:var(--vf-no)}
-.vfy-agent.notreached{border-left-color:#3a4049}
-.vfy-ix{font-size:11px;color:var(--vf-faint)}
-.vfy-agent[aria-current=true] .vfy-ix{color:var(--vf-dim)}
-.vfy-nm{flex:1;font-size:12.5px}
-.vfy-ct{font-size:11px;color:var(--vf-faint)}
-.vfy-agent.verified .vfy-ct{color:var(--vf-ok)}
-.vfy-agent.partial .vfy-ct,.vfy-agent.failed .vfy-ct{color:var(--vf-hold)}
-
-/* What crossed, travelling the edge it crossed. Runs once, with the marks. */
-.vfy-hand{display:block;position:relative;width:100%;text-align:left;font:inherit;
-  background:none;border:0;border-left:1px solid var(--vf-l);margin-left:12px;
-  padding:5px 0 5px 13px;cursor:pointer}
-.vfy-hand::after{content:"";position:absolute;left:-2px;width:3px;height:3px;border-radius:50%;
-  background:var(--vf-ok);animation:vfyRun .55s linear both;animation-delay:var(--d)}
-.vfy-hand.loop::after{background:var(--vf-hold)}
-.vfy-carry{font-size:11px;color:var(--vf-faint);line-height:1.45;display:block}
-.vfy-hand:hover .vfy-carry{color:var(--vf-dim)}
-.vfy-hand[aria-current=true] .vfy-carry{color:var(--vf-t)}
-.vfy-hand.loop{border-left:1px dashed var(--vf-hold)}
-.vfy-hand.loop .vfy-carry{color:var(--vf-hold)}
-
-.vfy-ttl{margin:0 0 4px;font-size:15px;font-weight:500;color:var(--vf-t)}
-.vfy-ttl span{font-size:11px;font-weight:400;color:var(--vf-faint);margin-left:9px}
-.vfy-does{font-size:13.5px;line-height:1.6;margin:0 0 5px;max-width:62ch;color:var(--vf-t)}
-.vfy-sum{font-size:12px;color:var(--vf-dim);margin:0 0 15px;line-height:1.55}
-.vfy h3{font-size:11px;font-weight:500;color:var(--vf-faint);margin:20px 0 7px;
-  border-top:1px solid var(--vf-l);padding-top:7px}
-.vfy-made{display:flex;flex-wrap:wrap;margin:0}
-.vfy-made div{display:flex;flex-direction:column;padding-right:14px;margin-right:14px;
-  border-right:1px solid var(--vf-l)}
+.vfy-more{padding:3px 22px 20px 75px}
+.vfy-more[hidden]{display:none}
+.vfy-does{margin:0 0 15px;font-size:13.5px;line-height:1.5;max-width:46ch}
+.vfy-made{display:flex;flex-wrap:wrap;margin:0 0 16px}
+.vfy-made div{display:flex;flex-direction:column;padding-right:18px;margin-right:18px;
+  border-right:1px solid var(--rule,#dcdcd6)}
 .vfy-made div:last-child{border-right:0;margin-right:0;padding-right:0}
-.vfy-made dt{order:2;font-size:10.5px;color:var(--vf-faint)}
-.vfy-made dd{margin:0;font-size:15px;color:var(--vf-t)}
-.vfy-chk{display:grid;grid-template-columns:11px 1fr;gap:9px;padding:7px 0;
-  border-top:1px solid #23282f;align-items:start}
-.vfy-dot{width:7px;height:7px;margin-top:5px;border-radius:50%;border:1px solid var(--vf-faint);
-  animation:vfyIn .22s ease both;animation-delay:var(--d)}
-.vfy-dot.ok{background:var(--vf-ok);border-color:var(--vf-ok)}
-.vfy-dot.no{background:var(--vf-no);border-color:var(--vf-no)}
-.vfy-chk b{font-size:12.5px;font-weight:400;display:block;color:var(--vf-t)}
-.vfy-chk span{font-size:11.5px;color:var(--vf-dim)}
-.vfy-q{border-top:1px solid #23282f;padding:7px 0}
-.vfy-q summary{cursor:pointer;font-size:12px;display:flex;gap:10px;align-items:baseline;
-  list-style:none;color:var(--vf-dim)}
+.vfy-made dd{margin:0;font-size:17px;font-weight:500}
+.vfy-made dt{font-size:11.5px;color:var(--soft,#5c636c);margin-top:3px}
+.vfy-chks{list-style:none;margin:0 0 15px;padding:0}
+.vfy-chks li{display:grid;grid-template-columns:16px 1fr;gap:9px;padding:6px 0;align-items:start}
+.vfy-tick{display:flex;margin-top:2px;color:var(--go,#40674f)}
+.vfy-tick.no{color:var(--stop,#8c3b3b)}
+.vfy-chks b{display:block;font-size:13px;font-weight:400}
+.vfy-chks em{font-style:normal;font-size:11.5px;color:var(--soft,#5c636c)}
+.vfy-hand{display:flex;align-items:center;gap:9px;margin:0 0 15px;font-size:12.5px;
+  color:var(--soft,#5c636c)}
+.vfy-hand svg{flex:none;color:#b6b6b0}
+.vfy-qs>summary{cursor:pointer;font-size:12.5px;color:var(--soft,#5c636c);list-style:none;
+  display:flex;align-items:center;gap:8px}
+.vfy-qs>summary::-webkit-details-marker{display:none}
+.vfy-qs>summary svg{color:#b6b6b0}
+.vfy-q{border-top:1px solid var(--rule,#dcdcd6);padding:7px 0;margin-top:7px}
+.vfy-q summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;font-size:12.5px;
+  list-style:none}
 .vfy-q summary::-webkit-details-marker{display:none}
-.vfy-q summary b{font-weight:400;color:var(--vf-t)}
-.vfy-q summary i{font-style:normal;color:var(--vf-ok);margin-left:auto;font-size:11px}
-.vfy-q summary i.fake{color:var(--vf-hold)}
-.vfy-q pre{margin:8px 0 2px;padding:9px 11px;background:#101317;font:inherit;font-size:11.5px;
-  white-space:pre-wrap;color:var(--vf-dim);line-height:1.6;border-left:1px solid var(--vf-l)}
-.vfy-wait{border-left:2px solid var(--vf-hold);padding:4px 0 4px 11px;margin:0 0 15px;
-  font-size:12.5px;line-height:1.55;color:var(--vf-dim);max-width:62ch}
-.vfy-msg{padding:24px 18px;font-size:13px;line-height:1.65;color:var(--vf-dim);max-width:66ch}
+.vfy-q summary span{font-size:11.5px;color:var(--soft,#5c636c)}
+.vfy-q summary i{font-style:normal;margin-left:auto;font-size:11.5px;color:var(--hold,#9a6b1f)}
+.vfy-q pre{margin:8px 0 0;padding:9px 11px;background:var(--wash,#f2f2ee);white-space:pre-wrap;
+  font:11.5px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--soft,#5c636c)}
+.vfy-none{margin:0;font-size:13px;line-height:1.5;color:var(--soft,#5c636c);max-width:46ch}
+.vfy-msg{padding:26px 22px;font-size:14px;line-height:1.6;color:var(--soft,#5c636c);max-width:52ch}
 
-@keyframes vfyDock{from{transform:translateX(26px);opacity:0}}
+@keyframes vfyDock{from{transform:translateX(22px);opacity:0}}
 @keyframes vfyIn{from{opacity:0;transform:translateY(4px)}}
 @keyframes vfyDraw{from{transform:scaleX(0)}}
-@keyframes vfyRun{from{top:-3px;opacity:0}25%{opacity:1}to{top:100%;opacity:0}}
 @media (prefers-reduced-motion:reduce){
-  .vfy,.vfy *,.vfy-hand::after{animation-duration:1ms!important}}
-@media (max-width:820px){.vfy{width:100%}.vfy-body{grid-template-columns:1fr;gap:16px}}
+  .vfy,.vfy *{animation-duration:1ms!important;transition-duration:1ms!important}}
+@media (max-width:620px){.vfy{width:100%}.vfy-more{padding-left:22px}}
 `;
 
   const esc = (s) =>
@@ -152,6 +142,13 @@
       /[&<>"]/g,
       (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
     );
+
+  const fmtN = (n) =>
+    typeof n === "number" && n >= 1000 ? n.toLocaleString("en-GB") : String(n);
+
+  // What an agent does is written as a fragment for the chain's tooltips. Here
+  // it is a line a person reads on its own, so it opens like one.
+  const sentence = (t) => (t ? t[0].toUpperCase() + t.slice(1) : "");
 
   const style = document.createElement("style");
   style.textContent = css;
@@ -170,10 +167,9 @@
   document.body.appendChild(scrim);
 
   let data = null;
-  let picked = 0;
-  let shown = null;
-  // The rail lands step by step when the panel opens, and holds still
-  // afterwards: a redraw from a click is not news.
+  let open = 0;
+  // The rows land one after another when the panel opens, and hold still
+  // afterwards: opening a step is not news.
   let fresh = false;
 
   function close() {
@@ -200,9 +196,11 @@
       data = await res.json();
     } catch (err) {
       panel.innerHTML =
-        '<div class="vfy-chrome"><div class="vfy-head"><h2>agent trace</h2>' +
-        '<button class="vfy-x">close</button></div></div>' +
-        '<div class="vfy-msg">Nothing to show: ' +
+        '<div class="vfy-top"><h2>' +
+        svg(TRACE) +
+        'Agent trace</h2><button class="vfy-x" aria-label="Close">' +
+        svg(CROSS, 16) +
+        '</button></div><div class="vfy-msg">Nothing to show: ' +
         esc(err.message) +
         ". This panel reports what the service measured, so with no answer it shows " +
         "nothing rather than a guess.</div>";
@@ -210,95 +208,57 @@
       return;
     }
     // Something that went wrong first; otherwise the first agent that ran.
-    // Never open on a step that has not run: it has nothing to show.
     const broken = data.steps.findIndex(
       (s) => s.status === "failed" || s.status === "partial"
     );
     const ran = data.steps.findIndex((s) => s.ran);
     const asked = focus ? data.steps.findIndex((s) => s.agent === focus) : -1;
-    picked = asked !== -1 ? asked : broken !== -1 ? broken : ran !== -1 ? ran : 0;
-    shown = null;
+    open = asked !== -1 ? asked : broken !== -1 ? broken : ran !== -1 ? ran : 0;
     fresh = true;
     draw();
   };
 
   function draw() {
-    const s = data.steps[picked];
-    const p = data.data_path;
-    panel.innerHTML =
-      chromeHtml() +
-      pathHtml(p) +
-      '<div class="vfy-body"><div><p class="vfy-flowhead">' +
-      (data.loops && (data.loops.revise_rounds || data.loops.repair_rounds)
-        ? "The chain looped back " +
-          (data.loops.revise_rounds + data.loops.repair_rounds) +
-          " time(s) before it settled."
-        : "Straight through, no agent sent work back.") +
-      '</p><ul class="vfy-pipe">' +
-      flowHtml() +
-      "</ul></div>" +
-      (shown && shown.kind ? handoffHtml(shown) : stepHtml(s)) +
-      "</div>";
+    panel.innerHTML = topHtml() + figsHtml() + '<ol class="vfy-steps">' + stepsHtml() + "</ol>";
     panel.querySelector(".vfy-x").addEventListener("click", close);
-    panel.querySelectorAll(".vfy-agent").forEach((b) =>
+    panel.querySelectorAll(".vfy-row").forEach((b) =>
       b.addEventListener("click", () => {
-        picked = Number(b.dataset.i);
-        shown = null;
-        draw();
-      })
-    );
-    panel.querySelectorAll(".vfy-hand").forEach((b) =>
-      b.addEventListener("click", () => {
-        shown = data.handoffs[Number(b.dataset.h)];
+        const i = Number(b.dataset.i);
+        open = open === i ? -1 : i;
         draw();
       })
     );
     fresh = false;
   }
 
-  function chromeHtml() {
-    const p = data.data_path || {};
+  function topHtml() {
     return (
-      '<div class="vfy-chrome"><div class="vfy-head"><h2>agent trace <span>— every step, ' +
-      "against the run's own record</span></h2>" +
-      '<span class="vfy-id">' +
+      '<div class="vfy-top"><h2>' +
+      svg(TRACE) +
+      'Agent trace</h2><span class="vfy-run">' +
       esc(data.event_id || "") +
-      " · run " +
+      " · " +
       esc(String(data.run_id || "").slice(0, 12)) +
-      '</span><button class="vfy-x">close</button></div><dl class="vfy-stat">' +
-      cellHtml(data.verified + "/" + data.of, "agents verified") +
-      cellHtml(data.checks_passed + "/" + data.checks_run, "checks passed") +
-      cellHtml(String(p.queries || 0), "queries") +
-      cellHtml(fmtN(p.rows || 0), "rows read") +
-      cellHtml(esc(p.schema || "—"), "schema") +
-      cellHtml(
-        p.reached_zetaris ? "zetaris" : "stand-in",
-        "data path",
-        !p.reached_zetaris
-      ) +
-      "</dl>" +
-      meterHtml() +
-      "</div>"
+      '</span><button class="vfy-x" aria-label="Close">' +
+      svg(CROSS, 16) +
+      "</button></div>"
     );
   }
 
-  function cellHtml(value, label, hold) {
-    return (
-      '<div><dd class="' +
-      (hold ? "hold" : "") +
-      '">' +
-      value +
-      "</dd><dt>" +
-      label +
-      "</dt></div>"
-    );
-  }
-
-  function meterHtml() {
+  function figsHtml() {
+    const p = data.data_path || {};
     const all = data.checks_run || 0;
     const share = all ? Math.round((data.checks_passed / all) * 100) : 0;
     return (
-      '<div class="vfy-meter" role="img" aria-label="' +
+      '<dl class="vfy-figs"><div><dd>' +
+      data.verified +
+      " of " +
+      data.of +
+      "</dd><dt>agents verified</dt></div><div><dd>" +
+      data.checks_passed +
+      " of " +
+      all +
+      '</dd><dt>checks passed</dt></div></dl><div class="vfy-meter" role="img" aria-label="' +
       data.checks_passed +
       " of " +
       all +
@@ -306,215 +266,170 @@
       (share === 100 ? "" : "short") +
       '" style="width:' +
       share +
-      '%"></i></div>'
+      '%"></i></div><p class="vfy-src' +
+      (p.reached_zetaris ? " live" : "") +
+      '">' +
+      svg(STORE, 16) +
+      "<span>" +
+      (p.reached_zetaris ? "Read over Zetaris" : "Offline stand-in, not Zetaris") +
+      " · " +
+      (p.queries || 0) +
+      " queries over " +
+      fmtN(p.rows || 0) +
+      " rows</span></p>"
     );
   }
 
-  function pathHtml(p) {
-    const ok = p.reached_zetaris;
-    return (
-      '<div class="vfy-path' +
-      (ok ? "" : " off") +
-      '"><b>' +
-      esc(p.verdict) +
-      "</b>" +
-      (ok
-        ? "The agents read the contract views over Zetaris."
-        : "The SQL and the four contract views are the same either way, so this is a " +
-          "credentials switch, not a rewrite. It is not Zetaris today.") +
-      '<dl><div><dt>mode</dt><dd>' +
-      esc(p.configured_mode) +
-      "</dd></div><div><dt>REST url set</dt><dd>" +
-      (p.rest_url_set ? "yes" : "no") +
-      "</dd></div><div><dt>schema</dt><dd>" +
-      esc(p.schema) +
-      "</dd></div><div><dt>queries</dt><dd>" +
-      p.queries +
-      "</dd></div><div><dt>rows</dt><dd>" +
-      p.rows +
-      "</dd></div><div><dt>errors</dt><dd>" +
-      p.errors +
-      "</dd></div></dl></div>"
-    );
+  function stepsHtml() {
+    return data.steps.map((s, i) => stepHtml(s, i)).join("");
   }
 
-  function flowHtml() {
-    const hands = data.handoffs || [];
-    let beat = 0;
-    const at = () => (fresh ? beat++ * 110 : 0);
-    return data.steps
-      .map((s, i) => {
-        const mine = agentHtml(s, i, at());
-        const out = hands
-          .map((h, hi) => [h, hi])
-          .filter(([h]) => h.frm === s.agent)
-          .map(([h, hi]) => handRailHtml(h, hi, at()))
-          .join("");
-        return "<li>" + mine + out + "</li>";
-      })
-      .join("");
-  }
-
-  function handRailHtml(h, hi, delay) {
-    const n = data.handoffs.indexOf(h);
-    return (
-      '<button class="vfy-hand ' +
-      (h.kind === "loop" ? "loop" : "") +
-      '" style="--d:' +
-      delay +
-      'ms" data-h="' +
-      (hi == null ? n : hi) +
-      '" aria-current="' +
-      (shown === h) +
-      '"><span class="vfy-carry">' +
-      (h.kind === "loop" ? "back to " + esc(h.to) + ": " : "to " + esc(h.to) + ": ") +
-      esc(
-        h.carried.length
-          ? h.carried.map((c) => c.what + " " + fmtN(c.n)).join(", ")
-          : "nothing recorded"
-      ) +
-      "</span></button>"
-    );
-  }
-
-  function fmtN(n) {
-    return typeof n === "number" && n >= 1000 ? n.toLocaleString("en-GB") : String(n);
-  }
-
-  function handoffHtml(h) {
-    return (
-      '<div><p class="vfy-does">' +
-      (h.kind === "loop"
-        ? esc(h.frm) + " sent work back to " + esc(h.to) + "."
-        : esc(h.frm) + " handed this to " + esc(h.to) + ".") +
-      '</p><p class="vfy-sum">' +
-      (h.kind === "loop"
-        ? "A back edge in the graph. It fired " + h.fired + " time(s) in this run."
-        : "Counted from the run record, not from what either agent said it did.") +
-      "</p><h3>What crossed</h3><dl class=\"vfy-made\">" +
-      h.carried
-        .map(
-          (c) =>
-            "<div><dd>" +
-            esc(fmtN(c.n)) +
-            "</dd><dt>" +
-            esc(c.what) +
-            "</dt></div>"
-        )
-        .join("") +
-      '</dl><p class="vfy-sum" style="margin-top:18px">Pick an agent on the left to see its ' +
-      "own checks and the queries it ran.</p></div>"
-    );
-  }
-
-  function agentHtml(s, i, delay) {
+  function stepHtml(s, i) {
     const cls = s.status === "not reached" ? "notreached" : s.status;
-    const n = s.checks.filter((c) => c.ok).length;
+    const kind = cls === "notreached" && s.agent === "hitl" ? "awaiting" : cls;
+    const passed = s.checks.filter((c) => c.ok).length;
     return (
-      '<button class="vfy-agent ' +
-      cls +
-      '" style="--d:' +
-      delay +
-      'ms" data-i="' +
+      '<li class="vfy-step ' +
+      kind +
+      '"><button class="vfy-row" data-i="' +
       i +
-      '" aria-current="' +
-      (i === picked) +
-      '"><span class="vfy-ix">' +
+      '" aria-expanded="' +
+      (i === open) +
+      '" style="--d:' +
+      (fresh ? i * 55 : 0) +
+      'ms"><span class="vfy-ix">' +
       String(i + 1).padStart(2, "0") +
+      '</span><span class="vfy-ic">' +
+      svg(ICON[s.agent] || '<circle cx="10" cy="10" r="6"/>') +
       '</span><span class="vfy-nm">' +
       esc(s.title || s.agent) +
       '</span><span class="vfy-ct">' +
-      (s.ran ? n + "/" + s.checks.length : "—") +
-      "</span></button>"
+      (s.ran ? passed + "/" + s.checks.length : kind === "awaiting" ? "waiting" : "—") +
+      '</span><span class="vfy-cv">' +
+      svg(CHEVRON, 16) +
+      '</span></button><div class="vfy-more"' +
+      (i === open ? "" : " hidden") +
+      ">" +
+      bodyHtml(s) +
+      "</div></li>"
     );
   }
 
-  function stepHtml(s) {
-    if (!s) return "<div></div>";
-    const made = Object.entries(s.produced || {}).filter(([, v]) => v != null && v !== "");
+  function bodyHtml(s) {
+    if (!s.ran) {
+      return (
+        '<p class="vfy-none">' +
+        esc(sentence(s.does)) +
+        ". " +
+        (s.agent === "hitl"
+          ? "Waiting on a person, so there is nothing to check yet."
+          : "This agent was not reached, so it is reported as not run rather than as passing.") +
+        "</p>"
+      );
+    }
     return (
-      '<div><h4 class="vfy-ttl">' +
-      esc(s.title || s.agent) +
-      '<span>' +
-      esc(s.agent) +
-      ' node</span></h4><p class="vfy-does">' +
-      esc(s.does) +
-      '</p><p class="vfy-sum">' +
-      (s.ran
-        ? esc(s.summary) +
-          (s.lane ? " · " + esc(s.lane) + " lane" : "") +
-          (s.model_id ? " · " + esc(s.model_id) : "") +
-          (s.latency_ms != null ? " · " + s.latency_ms + " ms" : "")
-        : "<b>" + WORD[s.status] + ".</b> " + esc(s.summary)) +
+      '<p class="vfy-does">' +
+      esc(sentence(s.does)) +
       "</p>" +
-      (s.ran
-        ? ""
-        : '<p class="vfy-wait">Nothing to verify here yet. This agent has not run, so ' +
-          "there are no checks to pass or fail. It is reported as <b>not reached</b> " +
-          "rather than as passing.</p>") +
-      (made.length
-        ? "<h3>What it produced</h3><dl class=\"vfy-made\">" +
-          made
-            .map(
-              ([k, v]) =>
-                "<div><dd>" +
-                esc(Array.isArray(v) ? v.length || "none" : v) +
-                "</dd><dt>" +
-                esc(k.replace(/_/g, " ")) +
-                "</dt></div>"
-            )
-            .join("") +
-          "</dl>"
-        : "") +
-      (s.checks.length
-        ? "<h3>" +
-          s.checks.filter((c) => c.ok).length +
-          " of " +
-          s.checks.length +
-          " checks pass</h3>" +
-          s.checks
-            .map(
-              (c, ci) =>
-                '<div class="vfy-chk"><span class="vfy-dot ' +
-                (c.ok ? "ok" : "no") +
-                '" style="--d:' +
-                ci * 45 +
-                'ms"></span><span><b>' +
-                esc(c.name) +
-                "</b><span>" +
-                esc(c.detail) +
-                "</span></span></div>"
-            )
-            .join("")
-        : "") +
-      (s.queries.length
-        ? "<h3>" + s.queries.length + " queries it ran</h3>" + s.queries.map(queryHtml).join("")
-        : "") +
-      "</div>"
+      madeHtml(s) +
+      checksHtml(s) +
+      handHtml(s) +
+      queriesHtml(s)
+    );
+  }
+
+  function madeHtml(s) {
+    const made = Object.entries(s.produced || {})
+      .filter(([, v]) => v != null && v !== "")
+      .slice(0, 4);
+    if (!made.length) return "";
+    return (
+      '<dl class="vfy-made">' +
+      made
+        .map(
+          ([k, v]) =>
+            "<div><dd>" +
+            esc(fmtN(Array.isArray(v) ? v.length : v)) +
+            "</dd><dt>" +
+            esc(k.replace(/_/g, " ")) +
+            "</dt></div>"
+        )
+        .join("") +
+      "</dl>"
+    );
+  }
+
+  function checksHtml(s) {
+    if (!s.checks.length) return "";
+    return (
+      '<ul class="vfy-chks">' +
+      s.checks
+        .map(
+          (c) =>
+            '<li><span class="vfy-tick ' +
+            (c.ok ? "" : "no") +
+            '">' +
+            svg(c.ok ? TICK : CROSS, 14) +
+            "</span><span><b>" +
+            esc(c.name) +
+            "</b><em>" +
+            esc(c.detail) +
+            "</em></span></li>"
+        )
+        .join("") +
+      "</ul>"
+    );
+  }
+
+  function handHtml(s) {
+    const title = (id) => {
+      const to = data.steps.find((x) => x.agent === id);
+      return to ? to.title || id : id;
+    };
+    return (data.handoffs || [])
+      .filter((h) => h.frm === s.agent)
+      .map(
+        (h) =>
+          '<p class="vfy-hand">' +
+          svg(h.kind === "loop" ? LOOP : ARROW, 16) +
+          "<span>" +
+          (h.kind === "loop"
+            ? "Sent back to " + esc(title(h.to)) + ", " + h.fired + " time(s)"
+            : "Handed to " +
+              esc(title(h.to)) +
+              (h.carried.length
+                ? " — " + esc(h.carried.map((c) => fmtN(c.n) + " " + c.what).join(", "))
+                : "")) +
+          "</span></p>"
+      )
+      .join("");
+  }
+
+  function queriesHtml(s) {
+    if (!s.queries.length) return "";
+    return (
+      '<details class="vfy-qs"><summary>' +
+      svg(CHEVRON, 14) +
+      s.queries.length +
+      (s.queries.length === 1 ? " query it ran" : " queries it ran") +
+      "</summary>" +
+      s.queries.map(queryHtml).join("") +
+      "</details>"
     );
   }
 
   function queryHtml(q) {
     if (!q.resolved) {
-      return (
-        '<div class="vfy-q"><summary><b>' +
-        esc(q.query_id) +
-        "</b> not in the record</summary></div>"
-      );
+      return '<div class="vfy-q"><b>' + esc(q.query_id) + "</b> not in the record</div>";
     }
-    const fake = q.source !== "zetaris";
     return (
       '<details class="vfy-q"><summary><b>' +
       esc((q.views && q.views[0]) || q.view) +
       "</b><span>" +
       q.rows +
       " rows</span>" +
-      (q.error ? '<span style="color:var(--stop,#8c3b3b)">' + esc(q.error) + "</span>" : "") +
-      '<i class="' +
-      (fake ? "fake" : "") +
-      '">' +
-      esc(q.source) +
-      "</i></summary><pre>" +
+      (q.error ? "<i>" + esc(q.error) + "</i>" : "") +
+      "</summary><pre>" +
       esc(q.sql) +
       "</pre></details>"
     );
