@@ -12,6 +12,7 @@ from typing import Any
 
 from langgraph.types import Command
 
+from floodsense_agents import labelling
 from floodsense_agents.checkpoints import build_checkpointer
 from floodsense_agents.events import spec
 from floodsense_agents.graph import build_deps, build_graph
@@ -143,9 +144,26 @@ class Runtime:
         )
         self.index[run_id] = row
 
+    def _kind(self, req: RunRequest) -> str:
+        """What this run may call itself.
+
+        Live means both the warehouse and the model were the real ones and the
+        question was about now. A stand-in answers deterministically and a
+        replay_ts answers as of a past clock, and neither is live however
+        convincing the output reads.
+        """
+        deps = self.deps
+        real = bool(
+            deps
+            and getattr(deps.zetaris, "live", False)
+            and getattr(deps.llm, "live", False)
+        )
+        return labelling.LIVE if real and not req.replay_ts else labelling.REPLAY
+
     def start(self, req: RunRequest) -> dict[str, Any]:
         run_id = uuid.uuid4().hex[:12]
         ev = spec(req.event_id)
+        kind = self._kind(req)
         try:
             self.graph.invoke(
                 {
@@ -156,8 +174,8 @@ class Runtime:
                     "replay_ts": req.replay_ts,
                     "request": req.model_dump(),
                     "event": ev.as_dict(),
-                    "served_from": "live",
-                    "cached_at": None,
+                    "served_from": kind,
+                    "cached_at": None if kind == labelling.LIVE else now_utc(),
                     "trace": [],
                     "revise_rounds": 0,
                     "repair_rounds": 0,

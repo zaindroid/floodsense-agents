@@ -71,9 +71,17 @@ class PagesTest(unittest.TestCase):
 
 class LabelOverTheApiTest(unittest.TestCase):
     def setUp(self) -> None:
-        deps = Deps(zetaris=FakeZetaris(), llm=FakeNightshift(), memory=NoMemory())
-        service.set_runtime(Runtime(graph=build_graph(deps), deps=deps))
+        self.deps = Deps(zetaris=FakeZetaris(), llm=FakeNightshift(), memory=NoMemory())
+        service.set_runtime(Runtime(graph=build_graph(self.deps), deps=self.deps))
         self.c = TestClient(service.app)
+
+    def as_if_live(self) -> None:
+        """Answer as the real warehouse and model would.
+
+        A run is live when both are real, so the stand-ins cannot produce one
+        and the cache rule below would otherwise never be reached."""
+        self.deps.zetaris.live = True
+        self.deps.llm.live = True
 
     def test_every_response_carries_a_label(self) -> None:
         for path in ("/health", "/config", "/readiness", "/desk/events"):
@@ -81,7 +89,13 @@ class LabelOverTheApiTest(unittest.TestCase):
             self.assertIn("label", body, path)
             self.assertIn("served_from", body, path)
 
-    def test_a_freshly_computed_run_is_live_and_a_re_read_is_not(self) -> None:
+    def test_a_run_on_the_stand_ins_is_never_called_live(self) -> None:
+        run = self.c.get("/desk/events/EMSR773").json()["run"]
+        self.assertFalse(run["label"]["live"])
+        self.assertEqual(run["label"]["kind"], "replay")
+
+    def test_a_live_run_served_again_says_cache(self) -> None:
+        self.as_if_live()
         first = self.c.get("/desk/events/EMSR773").json()["run"]
         self.assertTrue(first["label"]["live"])
         self.assertIsNone(first["label"]["text"])
@@ -96,6 +110,7 @@ class LabelOverTheApiTest(unittest.TestCase):
         self.assertIn(again["run_id"], again["label"]["text"])
 
     def test_the_snapshot_record_and_verify_endpoints_agree(self) -> None:
+        self.as_if_live()
         run_id = self.c.get("/desk/events/EMSR773").json()["run"]["run_id"]
         for path in (f"/runs/{run_id}", f"/runs/{run_id}/record", f"/runs/{run_id}/verify"):
             body = self.c.get(path).json()
@@ -116,6 +131,9 @@ class LabelOverTheApiTest(unittest.TestCase):
         self.assertNotIn("Cached answer from", app_js)
 
     def test_a_timeline_served_twice_says_the_second_one_is_cached(self) -> None:
+        # The cache is module state, so another test's timeline would make
+        # this one's first request the second.
+        pages._TIMELINE.clear()
         first = self.c.get("/desk/events/EMSR773/timeline").json()
         self.assertEqual(first["served_from"], "live")
         again = self.c.get("/desk/events/EMSR773/timeline").json()

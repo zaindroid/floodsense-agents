@@ -41,7 +41,7 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(body["served_from"], "live")
         cfg = self.c.get("/config").json()
         self.assertIn("FF_HITL", cfg["flags"])
-        self.assertIn("nemotron", cfg["lanes"]["deep"])
+        self.assertEqual(cfg["lanes"]["deep"], "meterless/deep")
 
     def test_ready_and_version(self) -> None:
         ready = self.c.get("/ready").json()
@@ -64,8 +64,8 @@ class ServiceTest(unittest.TestCase):
         run = r.json()
         self.assertEqual(run["status"], "awaiting_approval")
         self.assertEqual(run["approval"]["status"], "awaiting")
-        self.assertEqual(run["served_from"], "live")
-        self.assertIsNone(run["cached_at"])
+        self.assertEqual(run["served_from"], "replay")  # FakeZetaris backs it
+        self.assertIsNotNone(run["cached_at"])  # not live, so it is stamped
         for k in (
             "run_id",
             "thread_id",

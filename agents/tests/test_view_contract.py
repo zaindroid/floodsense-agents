@@ -33,6 +33,7 @@ def declared() -> dict[str, list[str]]:
     return out
 
 
+@unittest.skipUnless(VIEWS.is_file(), "contracts/views.yaml is not in this checkout")
 class ViewContractTest(unittest.TestCase):
     def setUp(self) -> None:
         self.declared = declared()

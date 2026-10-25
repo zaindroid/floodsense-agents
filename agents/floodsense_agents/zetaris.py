@@ -118,6 +118,8 @@ def _token_rejected(r: httpx.Response) -> bool:
 
 
 class ZetarisClient:
+    live = True
+
     def __init__(self) -> None:
         self.rest = (settings.zetaris_rest_url or "").rstrip("/")
         self._token: str | None = settings.zetaris_api_key
@@ -357,6 +359,8 @@ _SEED = {
 
 
 class FakeZetaris:
+    live = False
+
     def __init__(self) -> None:
         self._conn = sqlite3.connect(":memory:", check_same_thread=False)
         self._conn.row_factory = sqlite3.Row

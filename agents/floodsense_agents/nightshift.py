@@ -2,8 +2,10 @@
 
     complete(lane, system, user, *, json=True) -> (text, model_id)
 
-``lane`` is "fast" or "deep" and picks a pinned Nemotron model. The model id
-comes back so the trace and the Judge scores can record it. FakeNightshift
+``lane`` is "fast" or "deep" and asks Nightshift for a routing mode; Nightshift
+chooses the model, so naming one here would not pin it. The model it actually
+used comes back, so the trace and the Judge scores record that rather than a
+model we assumed. FakeNightshift
 answers offline with deterministic JSON, so tests and the UI need no credits.
 """
 
@@ -45,6 +47,8 @@ def parse_json(text: str) -> dict:
 
 
 class NightshiftClient:
+    live = True
+
     def __init__(self) -> None:
         self.base_url = (settings.meterless_base_url or "").rstrip("/")
         self.lanes = {"fast": settings.model_fast, "deep": settings.model_deep}
@@ -113,6 +117,8 @@ class FakeNightshift:
     judge | repair). An unknown task returns '{}' and the node falls back to
     its deterministic path.
     """
+
+    live = False
 
     def __init__(self, handlers: dict[str, Callable[[str, str], str]] | None = None) -> None:
         self.handlers = handlers or {}

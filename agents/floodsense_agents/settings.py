@@ -33,13 +33,14 @@ class Settings:
     zetaris_row_limit: int = int(_env("ZETARIS_ROW_LIMIT", "5000"))
     live_data: bool = _flag("FF_LIVE_DATA", False)  # floodsense.* instead of floodsense_seed.*
 
-    # Nightshift (Meterless): every LLM call goes through one client on pinned lanes
+    # Nightshift (Meterless): every LLM call goes through one client. A lane is a
+    # routing mode, not a model: Nightshift picks the model behind it.
     meterless_base_url: str | None = _env("METERLESS_BASE_URL")
     meterless_app: str = _env("METERLESS_APP", "floodsense-eu")
     meterless_scope: str = _env("METERLESS_SCOPE", "user")
     meterless_runtime_token: str = _env("METERLESS_RUNTIME_TOKEN", "") or ""
-    model_fast: str = _env("MODEL_FAST", "nvidia/nemotron-3.5-lightning-30b-a3b")
-    model_deep: str = _env("MODEL_DEEP", "nvidia/nemotron-3-super-120b-a12b")
+    model_fast: str = _env("MODEL_FAST", "meterless/fast")
+    model_deep: str = _env("MODEL_DEEP", "meterless/deep")
     llm_timeout_s: float = float(_env("LLM_TIMEOUT_S", "180"))
     llm_mode: str = _env(
         "LLM_MODE", "auto"
