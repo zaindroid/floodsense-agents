@@ -45,6 +45,11 @@ _FORBIDDEN = re.compile(
 )
 
 
+# How many rows an Evidence carries. A listing query states its own total
+# separately; anything longer than this is an excerpt, not the whole answer.
+ROWS_KEPT = 20
+
+
 def check_sql(sql: str) -> str:
     """The one place that decides whether the agents may run a statement."""
     text = (sql or "").strip()
@@ -69,6 +74,20 @@ def now_utc() -> str:
 def _view_of(sql: str) -> str:
     m = _VIEW.search(sql)
     return m.group(1) if m else "?"
+
+
+def _engine_of(response, js) -> str:
+    """Which engine answered.
+
+    Zetaris itself says nothing; a compatible endpoint names itself, on the
+    X-Engine header or in the body. We record what it said, so a run can be
+    audited without taking "it reached Zetaris" on trust.
+    """
+    name = response.headers.get("X-Engine") or (js.get("engine") if isinstance(js, dict) else "")
+    name = (name or "").strip()
+    if not name or name.lower() == "zetaris":
+        return "zetaris"
+    return f"zetaris-compatible:{name}"
 
 
 class Zetaris(Protocol):
@@ -121,14 +140,16 @@ class ZetarisClient:
                 if not r.is_success:
                     raise RuntimeError(f"Zetaris HTTP {r.status_code}: {r.text[:300]}")
                 break
-            rows = self._rows(r.json())
+            js = r.json()
+            rows = self._rows(js)
             return Evidence(
                 query_id=qid,
                 view=_view_of(sql),
                 sql=sql,
-                rows_sample=rows[:20],
+                rows_sample=rows[:ROWS_KEPT],
                 row_count=len(rows),
                 executed_at_utc=now_utc(),
+                source=_engine_of(r, js),
             )
         except Exception as e:
             log.warning("zetaris query failed: %s", str(e)[:200])
@@ -302,7 +323,7 @@ class FakeZetaris:
                 query_id=qid,
                 view=_view_of(sql),
                 sql=sql,
-                rows_sample=rows[:20],
+                rows_sample=rows[:ROWS_KEPT],
                 row_count=len(rows),
                 executed_at_utc=now_utc(),
                 source="zetaris-fake",

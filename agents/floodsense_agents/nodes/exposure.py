@@ -25,7 +25,7 @@ def make(deps: Deps):
         # sites. Scope to where this event actually is.
         lat0, lat1, lon0, lon1 = ev["bbox"]
         here = (
-            f"in_footprint = 1 AND lat BETWEEN {lat0} AND {lat1} AND lon BETWEEN {lon0} AND {lon1}"
+            f"in_footprint AND lat BETWEEN {lat0} AND {lat1} AND lon BETWEEN {lon0} AND {lon1}"
         )
         published = ev["footprint_published_utc"]
         clock = state.get("replay_ts")
@@ -118,10 +118,10 @@ def make(deps: Deps):
             rationale = f"exposure_join query failed: {(q.error or agg.error or '')[:160]}"
         elif assets:
             statement = f"{len(assets)} insured sites are exposed"
-            rationale = "deterministic join on exposure_join.in_footprint = 1"
+            rationale = "deterministic join on exposure_join.in_footprint"
         else:
             statement = "No insured site in the footprint"
-            rationale = "deterministic join on exposure_join.in_footprint = 1"
+            rationale = "deterministic join on exposure_join.in_footprint"
         hyps.append(
             Hypothesis(
                 id="H4",

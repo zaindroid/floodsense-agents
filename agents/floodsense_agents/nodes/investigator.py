@@ -105,7 +105,7 @@ def _deterministic(
     )
     foot = deps.zetaris.run_sql(
         f"SELECT COUNT(*) AS sites_in_footprint, COUNT(DISTINCT segment) AS segments FROM "
-        f"{s}.exposure_join WHERE in_footprint = 1"
+        f"{s}.exposure_join WHERE in_footprint"
     )
     warn = deps.zetaris.run_sql(
         f"SELECT point_id, warning_level, MIN(ts_utc) AS first_utc FROM {s}.hazard_timeline WHERE "

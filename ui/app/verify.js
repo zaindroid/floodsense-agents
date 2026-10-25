@@ -271,7 +271,7 @@
       '">' +
       svg(STORE, 16) +
       "<span>" +
-      (p.reached_zetaris ? "Read over Zetaris" : "Offline stand-in, not Zetaris") +
+      esc(sentence(p.verdict || "no query ran")) +
       " · " +
       (p.queries || 0) +
       " queries over " +

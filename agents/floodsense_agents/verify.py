@@ -21,10 +21,11 @@ from typing import Any
 from floodsense_agents.governance import DEFINITIONS
 from floodsense_agents.readiness import Check, _evidence, _views_in, title_of
 from floodsense_agents.settings import settings
-from floodsense_agents.zetaris import now_utc
+from floodsense_agents.zetaris import ROWS_KEPT, now_utc
 
 LIVE_SOURCE = "zetaris"
 FAKE_SOURCE = "zetaris-fake"
+COMPAT_SOURCE = "zetaris-compatible"
 
 
 @dataclass
@@ -269,32 +270,36 @@ def exposure(run: dict) -> Step:
         "segments": len(exp.get("by_segment") or []),
     }
 
+    # The listing query keeps ROWS_KEPT rows and the totals come from their own
+    # aggregate, so the list is an excerpt whenever the portfolio is larger.
+    # These check that the excerpt is as complete as it can be and that the two
+    # aggregates agree; summing the excerpt would only test the sample size.
+    policies = exp.get("policies") or 0
+    reported = exp.get("sum_insured_eur") or 0
     s.checks.append(
         Check(
-            "the policy count equals the sites it listed",
-            exp.get("policies") == len(assets),
-            f"reports {exp.get('policies')}, listed {len(assets)}",
-        )
-    )
-
-    # Recomputed from the rows, not taken on trust.
-    total = sum(a.get("sum_insured_eur") or 0 for a in assets)
-    s.checks.append(
-        Check(
-            "the sum insured adds up from the rows",
-            abs(total - (exp.get("sum_insured_eur") or 0)) < 0.01,
-            f"reports {exp.get('sum_insured_eur'):,.0f}, rows add to {total:,.0f}"
-            if exp.get("sum_insured_eur") is not None
-            else "no total reported",
+            "the list carries every exposed site it can hold",
+            len(assets) == min(policies, ROWS_KEPT),
+            f"lists {len(assets)} of {policies}"
+            + (f" (a query keeps {ROWS_KEPT})" if policies > ROWS_KEPT else ""),
         )
     )
 
     seg_total = sum(g.get("sum_insured_eur") or 0 for g in exp.get("by_segment") or [])
     s.checks.append(
         Check(
-            "the segment breakdown adds to the same total",
-            abs(seg_total - total) < 0.01,
-            f"segments add to {seg_total:,.0f}, rows to {total:,.0f}",
+            "the total matches the segment breakdown",
+            abs(seg_total - reported) < 0.01,
+            f"reports {reported:,.0f}, segments add to {seg_total:,.0f}",
+        )
+    )
+
+    total = sum(a.get("sum_insured_eur") or 0 for a in assets)
+    s.checks.append(
+        Check(
+            "the sites it listed fit inside that total",
+            total <= reported + 0.01,
+            f"the {len(assets)} listed add to {total:,.0f}, within {reported:,.0f}",
         )
     )
 
@@ -563,6 +568,11 @@ def data_path(run: dict) -> dict[str, Any]:
         sources[e.get("source") or "unknown"] = sources.get(e.get("source") or "unknown", 0) + 1
     live = sources.get(LIVE_SOURCE, 0)
     fake = sources.get(FAKE_SOURCE, 0)
+    # A compatible endpoint names itself; it is not Zetaris and is not the
+    # offline stand-in either.
+    compat = {k: n for k, n in sources.items() if k.startswith(COMPAT_SOURCE)}
+    compat_n = sum(compat.values())
+    compat_name = next(iter(compat), COMPAT_SOURCE).split(":", 1)[-1] if compat else ""
     return {
         "configured_mode": settings.zetaris_mode,
         "rest_url_set": bool(settings.zetaris_rest_url),
@@ -570,16 +580,20 @@ def data_path(run: dict) -> dict[str, Any]:
         "live_data_flag": settings.live_data,
         "queries": len(ev),
         "by_source": sources,
-        "reached_zetaris": live > 0 and fake == 0,
+        "reached_zetaris": live > 0 and fake == 0 and compat_n == 0,
+        "engine": "zetaris" if live and not compat_n else compat_name or ("stand-in" if fake else ""),
         "errors": sum(1 for e in ev.values() if e.get("error")),
         "rows": sum(e.get("row_count", 0) for e in ev.values()),
         "verdict": (
             "every query went to Zetaris"
-            if live and not fake
+            if live and not fake and not compat_n
+            else f"every query went to {compat_name}, a Zetaris-compatible endpoint "
+            "over the same contract views; not Zetaris itself"
+            if compat_n and not fake and not live
             else "no query reached Zetaris; this ran on the offline stand-in"
-            if fake and not live
-            else "mixed: some queries reached Zetaris and some did not"
-            if live and fake
+            if fake and not live and not compat_n
+            else "mixed: the queries did not all go to the same engine"
+            if (live or compat_n) and (fake or (live and compat_n))
             else "no query ran"
         ),
     }

@@ -145,18 +145,38 @@ class VerifyTest(unittest.TestCase):
         step = verify.skeptic(run)
         self.assertTrue(any("round limit" in c.name for c in step.checks if not c.ok))
 
-    def test_exposure_notices_a_total_that_does_not_add_up(self) -> None:
+    def test_exposure_notices_a_total_the_segments_do_not_support(self) -> None:
         run = self.fresh()
         run["exposure"]["sum_insured_eur"] = 99_000_000
         step = verify.exposure(run)
         self.assertEqual(step.status, "partial")
-        self.assertTrue(any("rows add to" in c.detail for c in step.checks if not c.ok))
+        self.assertTrue(any("segments add to" in c.detail for c in step.checks if not c.ok))
 
-    def test_exposure_notices_a_policy_count_that_does_not_match_its_rows(self) -> None:
+    def test_exposure_notices_a_policy_count_its_list_cannot_support(self) -> None:
         run = self.fresh()
         run["exposure"]["policies"] = 99
         step = verify.exposure(run)
-        self.assertTrue(any("listed" in c.detail for c in step.checks if not c.ok))
+        self.assertTrue(any("lists" in c.detail for c in step.checks if not c.ok))
+
+    def test_a_portfolio_larger_than_one_query_still_verifies(self) -> None:
+        # The list is an excerpt once the portfolio passes ROWS_KEPT. That is
+        # how the node works, so it must not read as a failed check: the real
+        # seed views hold 91 exposed policies and the stand-in holds 7.
+        run = self.fresh()
+        one = run["exposure"]["assets"][0]
+        run["exposure"]["assets"] = [dict(one, policy_id=f"P{i:04d}") for i in range(20)]
+        run["exposure"]["policies"] = 91
+        run["exposure"]["sum_insured_eur"] = 313_166_000.0
+        run["exposure"]["by_segment"] = [{"segment": "all", "sum_insured_eur": 313_166_000.0}]
+        step = verify.exposure(run)
+        self.assertEqual(step.status, "verified", [c.detail for c in step.checks if not c.ok])
+
+    def test_exposure_notices_a_list_that_claims_more_than_the_total(self) -> None:
+        run = self.fresh()
+        run["exposure"]["sum_insured_eur"] = 1.0
+        run["exposure"]["by_segment"] = [{"segment": "all", "sum_insured_eur": 1.0}]
+        step = verify.exposure(run)
+        self.assertTrue(any("within" in c.detail for c in step.checks if not c.ok))
 
     def test_playbook_notices_an_action_citing_a_claim_that_does_not_exist(self) -> None:
         run = self.fresh()

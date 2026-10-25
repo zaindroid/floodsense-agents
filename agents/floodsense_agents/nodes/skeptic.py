@@ -77,17 +77,17 @@ def _checks_for(h: Hypothesis, state: FloodState) -> list[tuple[str, str]]:
         return [
             (
                 "the footprint contains insured sites",
-                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint = 1 HAVING "
+                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint HAVING "
                 f"COUNT(*) >= 1",
             ),
             (
                 "the footprint does not swallow every site (it is a footprint, not a region)",
-                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint = 0 HAVING "
+                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE NOT in_footprint HAVING "
                 f"COUNT(*) >= 1",
             ),
             (
                 "sites in the footprint carry coordinates",
-                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint = 1 AND lat IS "
+                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint AND lat IS "
                 f"NOT NULL AND lon IS NOT NULL HAVING COUNT(*) >= 1",
             ),
         ]
