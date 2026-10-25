@@ -443,12 +443,15 @@ main {
   margin-top: 11px;
 }
 
+/* Two lines of room whether the name needs them or not, so the check counts
+   below sit on one line across the chain. */
 .node-t {
   display: block;
   font-size: 13.5px;
   margin-top: 1px;
   padding-right: 10px;
   line-height: 1.3;
+  min-height: 2.6em;
 }
 
 .node-c {

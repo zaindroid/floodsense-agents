@@ -34,15 +34,25 @@ from floodsense_agents.zetaris import now_utc
 AGENTS: tuple[tuple[str, str, str, str], ...] = (
     (
         "watchers",
-        "Hazard scan",
+        "Hazard scan agent",
         "sql",
         "scans the window for anomalies, every one carrying a query id",
     ),
-    ("investigator", "Investigator", "sql", "proposes the causal chain and writes cited claims"),
-    ("skeptic", "Skeptic", "sql", "tries to break each link with counter-check queries"),
-    ("exposure", "Exposure join", "sql", "joins the footprint to the portfolio"),
-    ("playbook", "Playbook", "deep", "drafts actions, each tied to the claims that justify it"),
-    ("judge", "Judge", "deep", "scores grounding, citations and every number"),
+    (
+        "investigator",
+        "Investigator agent",
+        "sql",
+        "proposes the causal chain and writes cited claims",
+    ),
+    ("skeptic", "Skeptic agent", "sql", "tries to break each link with counter-check queries"),
+    ("exposure", "Exposure join agent", "sql", "joins the footprint to the portfolio"),
+    (
+        "playbook",
+        "Playbook agent",
+        "deep",
+        "drafts actions, each tied to the claims that justify it",
+    ),
+    ("judge", "Judge agent", "deep", "scores grounding, citations and every number"),
     ("hitl", "Human approval", "none", "holds outbound actions until a named reviewer decides"),
 )
 
