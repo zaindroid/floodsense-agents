@@ -76,7 +76,8 @@ def make(deps: Deps):
             # An hourly cell mean understates a convective peak, so the
             # accumulation is the screen that sees this kind of event. Grouped
             # per point, so each one reports the hour its total crossed.
-            "rain_24h": f"SELECT point_id, MIN(ts_utc) AS ts_utc, MAX(acc) AS rain_24h_mm FROM ("
+            "rain_24h": f"SELECT point_id, MIN(ts_utc) AS ts_utc, ROUND(MAX(acc), 1) AS "
+            f"rain_24h_mm FROM ("
             f"SELECT point_id, ts_utc, SUM(rain_mm) OVER (PARTITION BY point_id ORDER BY ts_utc "
             f"ROWS BETWEEN 23 PRECEDING AND CURRENT ROW) AS acc FROM {s}.hazard_timeline WHERE "
             f"ts_utc BETWEEN '{t0}' AND '{t1}') z WHERE acc >= {day_at.value} GROUP BY point_id "
