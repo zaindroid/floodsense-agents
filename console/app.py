@@ -376,3 +376,28 @@ def pipeline_events(launch: str):
         media_type="text/event-stream",
         headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
     )
+
+
+@app.get("/pipeline/sources", include_in_schema=False)
+def pipeline_sources():
+    """What the warehouse federates, read from the provenance view itself.
+
+    The page draws this rather than a list of its own, so a source that is
+    added, or struck out for an unclear licence, shows up there without
+    anyone remembering to edit a diagram.
+    """
+    rt = runtime()
+    view = f"{settings.schema}.provenance"
+    ev = rt.deps.zetaris.run_sql(
+        f"SELECT dataset, publisher, licence FROM {view} ORDER BY dataset"
+    )
+    if ev.error:
+        raise HTTPException(503, f"{view}: {ev.error}")
+    return _live(
+        {
+            "view": view,
+            "query_id": ev.query_id,
+            "sources": ev.rows_sample,
+            "count": ev.row_count,
+        }
+    )

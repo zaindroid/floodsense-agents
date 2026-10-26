@@ -54,6 +54,24 @@ class PipelineTest(unittest.TestCase):
         # A page that is cached is a page showing yesterday's run.
         self.assertIn("no-store", r.headers.get("cache-control", ""))
 
+    def test_the_sources_come_from_the_provenance_view(self) -> None:
+        # The band on the page is what the warehouse declares, so a dataset
+        # struck out for an unclear licence disappears from the drawing
+        # without anyone editing it.
+        body = self.c.get("/pipeline/sources").json()
+        self.assertTrue(body["query_id"], "a source list with no query behind it is a claim")
+        self.assertIn("provenance", body["view"])
+        self.assertTrue(body["sources"])
+        for row in body["sources"]:
+            self.assertIn("dataset", row)
+            self.assertIn("publisher", row)
+            self.assertIn("licence", row)
+
+    def test_the_page_names_the_stack_it_runs_on(self) -> None:
+        page = self.c.get("/pipeline/").text
+        self.assertIn("Meterless Nightshift", page)
+        self.assertIn("Zetaris", page)
+
     def test_a_launch_answers_before_the_run_finishes(self) -> None:
         r = self.c.post("/pipeline/runs", json={"event_id": "EMSR773"})
         self.assertEqual(r.status_code, 200)

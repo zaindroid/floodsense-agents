@@ -151,6 +151,42 @@
         margin-top: 18px;
         display: block;
       }
+      .caption {
+        color: var(--soft);
+        font-size: 12px;
+        margin-top: 10px;
+      }
+      .map .ico {
+        fill: none;
+        stroke: var(--soft);
+        stroke-width: 1.4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .map .ico.on {
+        stroke: var(--river);
+      }
+      .map .ico.was {
+        stroke: var(--go);
+      }
+      .map .chip {
+        fill: #fff;
+        stroke: var(--rule);
+      }
+      .map .pip {
+        fill: var(--river);
+      }
+      .map .chiptext {
+        font-size: 11px;
+        fill: var(--soft);
+      }
+      .tally div.wide {
+        grid-column: 1 / -1;
+      }
+      .tally div.wide b {
+        font-size: 14px;
+        font-weight: 400;
+      }
       .map .plate {
         fill: #fff;
         stroke: var(--rule);
@@ -312,8 +348,9 @@
           call that was made, a stage that finished. The animation is paced so it can
           be read; the server time in the panel is the real one.
         </p>
-        <svg class="map" id="map" viewBox="0 0 1180 390" role="img"
+        <svg class="map" id="map" viewBox="0 0 1180 470" role="img"
              aria-label="The agent pipeline, drawn as it runs"></svg>
+        <p class="caption" id="srcnote"></p>
       </section>
 
       <aside>
@@ -325,6 +362,7 @@
           <div><span>MODEL CALLS</span><b id="n-models">0</b></div>
           <div><span>SERVER TIME</span><b id="n-time">—</b></div>
           <div><span>DATA PATH</span><b id="n-path">—</b></div>
+          <div class="wide"><span>MODEL LANES</span><b id="lanes">—</b></div>
         </div>
         <h2>Event log</h2>
         <ul class="feed" id="feed"></ul>
@@ -353,10 +391,38 @@
         { key: "hitl", name: "Approval", kind: "sys" },
       ];
       // Two systems every stage may reach, over one bus rather than sixteen
-      // crossing wires.
+      // crossing wires. Both are the stack this is built on: the warehouse is
+      // Zetaris, and every model call goes through Meterless Nightshift.
       const SYSTEMS = {
-        views: { name: "Contract views", sub: "Zetaris", x: 150 },
-        model: { name: "Model lanes", sub: "Nightshift", x: 730 },
+        views: { name: "Contract views", sub: "Zetaris", x: 270, w: 200 },
+        model: { name: "Meterless Nightshift", sub: "Nemotron lanes", x: 700, w: 240 },
+      };
+
+      // One mark each, drawn from what the thing does. The agent marks are
+      // the ones the trace panel already uses, so a reader meets the same
+      // figure twice rather than two drawings of one agent.
+      const ICON = {
+        scope: '<path d="M3.5 5h13l-5 5.5V16l-3-1.5v-4z"/>',
+        watchers:
+          '<path d="M3 15a7 7 0 0 1 14 0"/><path d="M6.5 15a3.5 3.5 0 0 1 7 0"/>' +
+          '<circle cx="10" cy="15" r=".9"/>',
+        investigator: '<circle cx="9" cy="9" r="5"/><path d="M12.8 12.8 17 17"/>',
+        skeptic: '<path d="M3.5 7.5h10l-2.5-2.5"/><path d="M16.5 12.5h-10l2.5 2.5"/>',
+        exposure: '<circle cx="8" cy="10" r="4.6"/><circle cx="12" cy="10" r="4.6"/>',
+        playbook:
+          '<rect x="4" y="3.5" width="12" height="13" rx="1.5"/>' +
+          '<path d="M7 7.5h6M7 10.5h6M7 13.5h3.5"/>',
+        judge:
+          '<path d="M10 4.5v11"/><path d="M4.5 7.5h11"/><path d="M4.5 7.5 2.5 12h4z"/>' +
+          '<path d="M15.5 7.5 13.5 12h4z"/><path d="M7 16h6"/>',
+        hitl:
+          '<circle cx="10" cy="7" r="2.6"/>' +
+          '<path d="M4.5 16c0-3 2.5-4.6 5.5-4.6s5.5 1.6 5.5 4.6"/>',
+        views:
+          '<ellipse cx="10" cy="5.5" rx="6" ry="2.5"/>' +
+          '<path d="M4 5.5v9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-9"/>' +
+          '<path d="M4 10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5"/>',
+        model: '<path d="M4 14.5a6 6 0 1 1 12 0"/><path d="M10 14.5 13.2 8.8"/>',
       };
 
       const SVG_NS = "http://www.w3.org/2000/svg";
@@ -370,17 +436,32 @@
         (parent || map).appendChild(node);
         return node;
       };
-      const text = (x, y, s, cls, parent) => {
-        const t = el("text", { x: x, y: y, class: cls, "text-anchor": "middle" }, parent);
+      const text = (x, y, s, cls, parent, anchor) => {
+        const t = el(
+          "text",
+          { x: x, y: y, class: cls, "text-anchor": anchor || "middle" },
+          parent
+        );
         t.textContent = s;
         return t;
       };
+      const icon = (x, y, paths, parent) => {
+        const g = el("g", { transform: `translate(${x} ${y})`, class: "ico" }, parent);
+        g.innerHTML = paths || "";
+        return g;
+      };
+      const clip = (s, n) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
 
       // ---- the schematic -------------------------------------------------
-      const SYS_Y = 40;
-      const SYS_H = 72;
-      const BUS_Y = 152;
-      const ROW_Y = 212;
+      const SRC_Y1 = 22;
+      const SRC_Y2 = 62;
+      const SRC_H = 32;
+      const SRC_W = 150;
+      const RAIL_Y = 112;
+      const SYS_Y = 140;
+      const SYS_H = 76;
+      const BUS_Y = 252;
+      const ROW_Y = 300;
       const PLATE_H = 76;
       const PLATE_W = 118;
       const PITCH = 140;
@@ -398,26 +479,80 @@
           g
         );
         const cx = x + w / 2;
-        if (index) text(cx, y + 20, index, "num", g);
-        text(cx, y + (index ? 40 : 32), label, "name", g);
-        text(cx, y + (index ? 56 : 48), sub, "tag", g);
+        let ico;
+        if (kind === "sys" && w >= 180) {
+          // Wide enough to read as a block: mark on the left, text beside it.
+          ico = icon(x + 18, y + h / 2 - 10, ICON[id], g);
+          text(x + 52, y + h / 2 - 1, label, "name", g, "start");
+          text(x + 52, y + h / 2 + 16, sub.toUpperCase(), "tag", g, "start");
+        } else {
+          if (index) text(x + 12, y + 18, index, "num", g, "start");
+          ico = icon(x + w - 30, y + 9, ICON[id], g);
+          text(cx, y + 47, label, "name", g);
+          text(cx, y + 63, sub, "tag", g);
+        }
         const ring = el(
           "rect",
           { x: x - 5, y: y - 5, width: w + 10, height: h + 10, rx: r + 5, class: "ring" },
           g
         );
-        nodes[id] = { box: box, ring: ring, cx: cx, cy: y + h / 2, x: x, y: y, w: w, h: h, g: g };
+        nodes[id] = {
+          box: box,
+          ring: ring,
+          ico: ico,
+          cx: cx,
+          cy: y + h / 2,
+          x: x,
+          y: y,
+          w: w,
+          h: h,
+          g: g,
+        };
         return nodes[id];
       }
 
-      function draw() {
+      function sourceBand(sources) {
+        // The datasets Zetaris federates, read from the provenance view, so
+        // this band is what the warehouse declares rather than a list kept
+        // in the page. Two rows, staggered, so a chip in the upper row drops
+        // to the rail through a gap in the lower one instead of across it.
+        if (!sources.length) return;
+        const top = sources.slice(0, 4);
+        const bottom = sources.slice(4, 7);
+        const centres = [];
+        const place = (list, y, x0) =>
+          list.forEach((s, i) => {
+            const x = x0 + i * (SRC_W + 20);
+            const g = el("g", {});
+            el("rect", { x: x, y: y, width: SRC_W, height: SRC_H, rx: 2, class: "chip" }, g);
+            el("circle", { cx: x + 12, cy: y + SRC_H / 2, r: 2.6, class: "pip" }, g);
+            text(x + 22, y + SRC_H / 2 + 4, clip(s.dataset || "", 23), "chiptext", g, "start");
+            const title = el("title", {}, g);
+            title.textContent = `${s.dataset}\n${s.publisher}\n${s.licence}`;
+            const cx = x + SRC_W / 2;
+            centres.push(cx);
+            el("path", { d: `M ${cx} ${y + SRC_H} V ${RAIL_Y}`, class: "wire" });
+          });
+        place(top, SRC_Y1, 20);
+        place(bottom, SRC_Y2, 105);
+        const left = Math.min(...centres);
+        const right = Math.max(...centres);
+        el("path", { d: `M ${left} ${RAIL_Y} H ${right}`, class: "wire bus" });
+        el("path", { d: `M 370 ${RAIL_Y} V ${SYS_Y}`, class: "wire" });
+        text(20, SRC_Y1 - 8, "FEDERATED SOURCES", "tag", null, "start");
+      }
+
+
+      function draw(sources) {
+        sourceBand(sources || []);
+
         // the bus the stages reach the systems over
         el("path", { d: `M ${X0 + 59} ${BUS_Y} H ${X0 + 7 * PITCH + 59}`, class: "wire bus" });
 
         for (const key in SYSTEMS) {
           const s = SYSTEMS[key];
-          plate(key, s.x, SYS_Y, 200, SYS_H, s.name, s.sub.toUpperCase(), "sys");
-          el("path", { d: `M ${s.x + 100} ${SYS_Y + SYS_H} V ${BUS_Y}`, class: "wire" });
+          plate(key, s.x, SYS_Y, s.w, SYS_H, s.name, s.sub, "sys");
+          el("path", { d: `M ${s.x + s.w / 2} ${SYS_Y + SYS_H} V ${BUS_Y}`, class: "wire" });
         }
 
         STAGES.forEach((stage, i) => {
@@ -448,10 +583,10 @@
         // loop it is rather than as another forward arrow
         const sk = nodes.skeptic;
         const inv = nodes.investigator;
-        const loop = `M ${sk.cx} ${ROW_Y + PLATE_H} C ${sk.cx} 330, ${inv.cx} 330, ${inv.cx} ${ROW_Y + PLATE_H}`;
+        const loop = `M ${sk.cx} ${ROW_Y + PLATE_H} C ${sk.cx} 430, ${inv.cx} 430, ${inv.cx} ${ROW_Y + PLATE_H}`;
         el("path", { d: loop, class: "wire" });
         routes["revise"] = path(loop);
-        text((sk.cx + inv.cx) / 2, 350, "revise", "tag");
+        text((sk.cx + inv.cx) / 2, 450, "revise", "tag");
 
         // one route per stage and system, over the bus
         STAGES.forEach((stage) => {
@@ -496,6 +631,10 @@
         if (cls) {
           n.box.classList.remove("live", "done", "bad");
           n.box.classList.add(cls);
+          if (n.ico) {
+            n.ico.classList.remove("on", "was");
+            n.ico.classList.add(cls === "done" ? "was" : "on");
+          }
         }
         if (reduced) return;
         n.ring.animate(
@@ -683,25 +822,41 @@
         }
       }
 
-      async function events() {
+      async function init() {
+        // Both reads describe the service as it is now; neither is a run, so
+        // the page is drawn from them before anyone presses anything.
+        const [cfg, prov] = await Promise.all([
+          fetch("/config").then((r) => r.json()).catch(() => ({})),
+          fetch("/pipeline/sources").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        ]);
+
         const sel = document.getElementById("event");
-        let list = ["EMSR773"];
-        try {
-          const cfg = await (await fetch("/config")).json();
-          if (Array.isArray(cfg.events) && cfg.events.length) list = cfg.events;
-        } catch (e) {
-          /* the default is enough to run */
-        }
+        const list = Array.isArray(cfg.events) && cfg.events.length ? cfg.events : ["EMSR773"];
         sel.innerHTML = "";
         list.forEach((id) => {
           const o = document.createElement("option");
           o.value = o.textContent = id;
           sel.appendChild(o);
         });
+
+        if (cfg.lanes) {
+          // The lanes are a configured fact, so they can be shown before any
+          // model has been called.
+          document.getElementById("lanes").textContent =
+            cfg.lanes.fast + " / " + cfg.lanes.deep;
+        }
+
+        draw(prov ? prov.sources || [] : []);
+        if (!prov) {
+          const note = document.getElementById("srcnote");
+          note.textContent = "The provenance view did not answer, so the sources are not drawn.";
+        } else {
+          document.getElementById("srcnote").textContent =
+            prov.count + " datasets, read from " + prov.view + " on query " + prov.query_id;
+        }
       }
 
-      draw();
-      events();
+      init();
       document.getElementById("run").addEventListener("click", start);
     </script>
   </body>
