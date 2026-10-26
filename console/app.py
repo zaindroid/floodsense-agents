@@ -43,7 +43,11 @@ from fastapi.responses import (
 )
 
 from floodsense_agents import labelling
-from floodsense_agents.__main__ import app, runtime
+# _stored is the service's own re-read rule: a clocked replay stays a
+# replay, a re-read with no clock is cache. The record and verify views
+# here read it back the same way /runs/{id} does, so three views of one
+# run cannot disagree about where the answer came from.
+from floodsense_agents.__main__ import _stored, app, runtime
 from floodsense_agents.events import spec
 from floodsense_agents.models import RunRequest
 from floodsense_agents.readiness import report as readiness_report
@@ -74,15 +78,6 @@ def _live(body: dict) -> dict:
     return labelling.labelled(body)
 
 
-def _stored(run_id: str) -> dict:
-    """A snapshot of a run computed earlier. Serving it as live would be a lie."""
-    rt = runtime()
-    run = rt.snapshot(run_id)
-    row = next((r for r in rt.past() if r["run_id"] == run_id), None)
-    if row and run.get("served_from") == labelling.LIVE:
-        run["served_from"] = labelling.CACHE
-        run["cached_at"] = row.get("created_at")
-    return run
 
 
 _TYPES = {".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
@@ -136,6 +131,35 @@ def _page(root, name: str) -> HTMLResponse:
 
 def _mock_page(name: str) -> FileResponse:
     return _static(MOCK_DIR, name)
+
+
+def _release(*paths: str) -> None:
+    """Drop the service's own version of a path so the console's wins.
+
+    The agents service grew a console of its own after this one, so both
+    define /, the /desk views and a few run views. FastAPI answers with the
+    first route that matches, which would hand them to whichever module
+    imported first. Naming them here says which layer owns the route.
+    """
+    owned = set(paths)
+    app.router.routes = [r for r in app.router.routes if getattr(r, "path", "") not in owned]
+
+
+OURS = (
+    "/",
+    "/console",
+    "/desk/events",
+    "/desk/events/{event_id}",
+    "/desk/events/{event_id}/timeline",
+    "/desk/dispatch-target",
+    "/readiness",
+    "/runs/{run_id}/outbound",
+    "/runs/{run_id}/exposure.csv",
+    "/runs/{run_id}/verify",
+    "/runs/{run_id}/record",
+    "/runs/{run_id}/dispatch",
+)
+_release(*OURS)
 
 
 @app.get("/", include_in_schema=False)

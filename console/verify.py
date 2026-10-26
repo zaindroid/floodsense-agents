@@ -21,7 +21,12 @@ from typing import Any
 from floodsense_agents.governance import DEFINITIONS
 from floodsense_agents.readiness import Check, _evidence, _views_in, title_of
 from floodsense_agents.settings import settings
-from floodsense_agents.zetaris import ROWS_KEPT, now_utc
+from floodsense_agents.zetaris import now_utc
+
+# How many rows a query keeps in rows_sample. The client inlines this as a
+# literal, so it is restated here rather than imported; test_verify.py asserts
+# the two still agree by reading a real evidence record.
+ROWS_KEPT = 20
 
 LIVE_SOURCE = "zetaris"
 FAKE_SOURCE = "zetaris-fake"

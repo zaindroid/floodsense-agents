@@ -75,14 +75,6 @@ class LabelOverTheApiTest(unittest.TestCase):
         service.set_runtime(Runtime(graph=build_graph(self.deps), deps=self.deps))
         self.c = TestClient(service.app)
 
-    def as_if_live(self) -> None:
-        """Answer as the real warehouse and model would.
-
-        A run is live when both are real, so the stand-ins cannot produce one
-        and the cache rule below would otherwise never be reached."""
-        self.deps.zetaris.live = True
-        self.deps.llm.live = True
-
     def test_every_response_carries_a_label(self) -> None:
         for path in ("/health", "/config", "/readiness", "/desk/events"):
             body = self.c.get(path).json()
@@ -94,28 +86,29 @@ class LabelOverTheApiTest(unittest.TestCase):
         self.assertFalse(run["label"]["live"])
         self.assertEqual(run["label"]["kind"], "replay")
 
-    def test_a_live_run_served_again_says_cache(self) -> None:
-        self.as_if_live()
+    def test_the_same_run_served_again_still_names_its_provenance(self) -> None:
         first = self.c.get("/desk/events/EMSR773").json()["run"]
-        self.assertTrue(first["label"]["live"])
-        self.assertIsNone(first["label"]["text"])
-
-        # The same answer served again was computed earlier. Saying "live"
-        # here is exactly what the rule forbids.
         again = self.c.get("/desk/events/EMSR773").json()["run"]
         self.assertEqual(again["run_id"], first["run_id"])
+        # Nothing computed earlier may be served as fresh, whichever path
+        # produced it. labelling.data_plane_is_live refuses a stand-in by
+        # type, so this cannot be driven through a live first read here;
+        # agents/tests/test_labelling.py holds that rule itself.
         self.assertFalse(again["label"]["live"])
-        self.assertEqual(again["label"]["kind"], "cache")
+        self.assertIn(again["label"]["kind"], ("cache", "replay"))
         self.assertIn("not live", again["label"]["text"])
-        self.assertIn(again["run_id"], again["label"]["text"])
+        self.assertIsNotNone(again["cached_at"])
 
     def test_the_snapshot_record_and_verify_endpoints_agree(self) -> None:
-        self.as_if_live()
         run_id = self.c.get("/desk/events/EMSR773").json()["run"]["run_id"]
+        kinds = set()
         for path in (f"/runs/{run_id}", f"/runs/{run_id}/record", f"/runs/{run_id}/verify"):
             body = self.c.get(path).json()
             self.assertFalse(body["label"]["live"], path)
-            self.assertEqual(body["label"]["kind"], "cache", path)
+            kinds.add(body["label"]["kind"])
+        # One run, one provenance: three views of it may not disagree about
+        # where the answer came from.
+        self.assertEqual(len(kinds), 1, kinds)
 
     def test_the_decision_record_carries_its_own_provenance(self) -> None:
         run_id = self.c.get("/desk/events/EMSR773").json()["run"]["run_id"]
@@ -130,16 +123,46 @@ class LabelOverTheApiTest(unittest.TestCase):
         # The wording is never assembled in the browser.
         self.assertNotIn("Cached answer from", app_js)
 
-    def test_a_timeline_served_twice_says_the_second_one_is_cached(self) -> None:
+    def test_a_timeline_served_twice_says_the_second_one_came_from_the_cache(self) -> None:
         # The cache is module state, so another test's timeline would make
         # this one's first request the second.
         pages._TIMELINE.clear()
         first = self.c.get("/desk/events/EMSR773/timeline").json()
-        self.assertEqual(first["served_from"], "live")
+        self.assertEqual(first["served_from"], "replay")
         again = self.c.get("/desk/events/EMSR773/timeline").json()
         self.assertEqual(again["served_from"], "cache")
         self.assertIsNotNone(again["cached_at"])
         self.assertFalse(again["label"]["live"])
+
+
+class RouteOwnershipTest(unittest.TestCase):
+    """The console's page wins where both layers define one.
+
+    The agents service grew a console of its own, so / and the /desk views
+    exist in both. FastAPI answers with the first match, which would make
+    import order decide which page a visitor gets. console.app drops the
+    service's copy of the paths it owns; this holds that.
+    """
+
+    def test_no_path_is_registered_twice(self) -> None:
+        from collections import Counter
+
+        from floodsense_agents.__main__ import app
+
+        paths = Counter(
+            (r.path, tuple(sorted(getattr(r, "methods", ()) or ())))
+            for r in app.router.routes
+            if getattr(r, "path", None)
+        )
+        self.assertEqual([k for k, n in paths.items() if n > 1], [])
+
+    def test_the_console_owns_the_pages_it_names(self) -> None:
+        self.assertEqual(self.c.get("/", follow_redirects=False).headers["location"], "/app/")
+        for path in pages.OURS:
+            self.assertIn(path, [r.path for r in pages.app.router.routes], path)
+
+    def setUp(self) -> None:
+        self.c = TestClient(service.app)
 
 
 if __name__ == "__main__":

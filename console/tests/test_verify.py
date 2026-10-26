@@ -25,6 +25,7 @@ from console import verify  # noqa: E402
 from floodsense_agents.models import ApprovalDecision, RunRequest  # noqa: E402
 from floodsense_agents.runtime import Runtime  # noqa: E402
 from floodsense_agents.settings import settings  # noqa: E402
+from floodsense_agents.zetaris import FakeZetaris  # noqa: E402
 
 
 class VerifyTest(unittest.TestCase):
@@ -280,6 +281,20 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(rep["verified"], 0)
         self.assertTrue(all(s["status"] == "not reached" for s in rep["steps"]))
         self.assertIn("no query ran", rep["data_path"]["verdict"])
+
+
+class RowCapTest(unittest.TestCase):
+    """verify.ROWS_KEPT has to be the cap the client really applies.
+
+    The agents inline it as a literal, so this reads it back off a real
+    evidence record instead of trusting the copy.
+    """
+
+    def test_the_restated_cap_is_the_one_a_query_applies(self) -> None:
+        ev = FakeZetaris().run_sql(f"SELECT point_id, ts_utc FROM {settings.schema}.hazard_timeline")
+        self.assertIsNone(ev.error, ev.error)
+        self.assertGreater(ev.row_count, verify.ROWS_KEPT, "need a view bigger than the cap")
+        self.assertEqual(len(ev.rows_sample), verify.ROWS_KEPT)
 
 
 if __name__ == "__main__":
