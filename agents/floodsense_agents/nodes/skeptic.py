@@ -3,7 +3,9 @@
 Runs at most SKEPTIC_MAX_ROUNDS SQL counter-checks per hypothesis and marks
 it supported or not_supported. Counter-checks are deterministic predicates
 over fresh queries, so a verdict is reproducible and every check has a
-query_id. The deep lane only writes the rationale from the same rows.
+query_id. The fast lane only writes the rationale from the same rows.
+How many checks run is SKEPTIC_MAX_ROUNDS (default 3). A smoke run can set
+that to 1; the node does not hardcode the cap.
 """
 
 from __future__ import annotations
@@ -22,120 +24,84 @@ from floodsense_agents.state import Deps, FloodState, add_evidence, trace
 log = logging.getLogger("floodsense.skeptic")
 
 
-def resolve_points(deps: Deps, state: FloodState) -> tuple[dict[str, list[str]], Evidence, str]:
-    """Match the points the event names to the ids the view actually carries.
-
-    The event spec names catchment points the way the reporting does (chiva,
-    poyo-ribaroja). The live warehouse carries grid points (VAL01..VAL08), so
-    every counter-check scoped to a name returned no rows and each hypothesis
-    came back not_supported on live data for a reason that had nothing to do
-    with the hazard. Where the names are absent, the checks run over every
-    point the view carries in the window -- all of them inside the event bbox
-    -- and the hypothesis says so.
-    """
+def _checks_for(h: Hypothesis, state: FloodState) -> list[tuple[str, str, tuple[str, ...]]]:
+    """(name, sql): each query must return >= 1 row for the check to pass."""
     s, ev = settings.schema, state["event"]
     t0, t1 = window(state)
-    e = deps.zetaris.run_sql(
-        f"SELECT DISTINCT point_id FROM {s}.hazard_timeline WHERE ts_utc BETWEEN '{t0}' AND "
-        f"'{t1}' ORDER BY point_id"
-    )
-    have = [r["point_id"] for r in e.rows_sample]
-    known = {p.lower(): p for p in have}
-
-    def pick(names) -> tuple[list[str], bool]:
-        hit = [known[n.lower()] for n in names if n.lower() in known]
-        return (hit, False) if hit else (have, bool(have))
-
-    rain, rain_guessed = pick(ev["rain_points"])
-    river, river_guessed = pick(ev["river_points"])
-    note = ""
-    if rain_guessed or river_guessed:
-        note = f"the view carries {', '.join(have)}, not the named points; checked over all of them"
-    return {"rain": rain, "river": river}, e, note
-
-
-def _in(points: list[str]) -> str:
-    # An empty list would make "IN ()", which is not SQL. A literal that
-    # cannot match keeps the check honest: it finds nothing and fails.
-    return ", ".join(f"'{p}'" for p in points) or "'no-such-point'"
-
-
-def _checks_for(
-    h: Hypothesis, state: FloodState, pts: dict[str, list[str]]
-) -> list[tuple[str, str]]:
-    """(name, sql): each query must return >= 1 row for the check to pass."""
-    s = settings.schema
-    t0, t1 = window(state)
-    rain_pts = _in(pts["rain"])
-    river_pts = _in(pts["river"])
-    rise = DEFINITIONS["extreme_discharge_rise"].value
+    clock = (t0, t1)
+    day = (t0[:10], last_complete_day(t1))
+    rain_pts = ", ".join(f"'{p}'" for p in ev["rain_points"])
+    river_pts = ", ".join(f"'{p}'" for p in ev["river_points"])
     if h.link == "rain->catchment":
         return [
             (
                 DEFINITIONS["extreme_rain"].wording,
                 f"SELECT point_id, MAX(rain_mm) AS max_mm FROM {s}.hazard_timeline WHERE point_id "
-                f"IN ({rain_pts}) AND ts_utc BETWEEN '{t0}' AND '{t1}' GROUP BY point_id HAVING "
+                f"IN ({rain_pts}) AND ts_utc BETWEEN ? AND ? GROUP BY point_id HAVING "
                 f"MAX(rain_mm) >= {DEFINITIONS['extreme_rain'].value}",
+                clock,
             ),
             (
                 "rain lasted more than one hour",
                 f"SELECT point_id, COUNT(*) AS hours FROM {s}.hazard_timeline WHERE point_id IN "
-                f"({rain_pts}) AND rain_mm > 0 AND ts_utc BETWEEN '{t0}' AND '{t1}' GROUP BY "
+                f"({rain_pts}) AND rain_mm > 0 AND ts_utc BETWEEN ? AND ? GROUP BY "
                 f"point_id HAVING COUNT(*) >= 2",
+                clock,
             ),
-            # One pass, not a self-join: Lightning federates this view from a
-            # REST source and cannot resolve the same view twice in one
-            # statement -- it fails with MISSING_ATTRIBUTES, so on live data
-            # this check errored rather than answered.
             (
                 "rain started before the discharge peak",
-                f"SELECT MIN(CASE WHEN point_id IN ({rain_pts}) AND rain_mm > 0 THEN ts_utc END) "
-                f"AS first_rain, MAX(CASE WHEN point_id IN ({river_pts}) AND discharge_m3s IS NOT "
-                f"NULL THEN ts_utc END) AS peak FROM {s}.hazard_timeline WHERE ts_utc BETWEEN "
-                f"'{t0}' AND '{t1}' HAVING MIN(CASE WHEN point_id IN ({rain_pts}) AND rain_mm > 0 "
-                f"THEN ts_utc END) < MAX(CASE WHEN point_id IN ({river_pts}) AND discharge_m3s IS "
-                f"NOT NULL THEN ts_utc END)",
+                f"SELECT MIN(r.ts_utc) AS first_rain, MAX(d.ts_utc) AS peak FROM "
+                f"{s}.hazard_timeline r, {s}.hazard_timeline d WHERE r.point_id IN ({rain_pts}) "
+                f"AND r.rain_mm > 0 AND d.point_id IN ({river_pts}) AND d.discharge_m3s IS NOT "
+                f"NULL AND r.ts_utc BETWEEN ? AND ? AND d.ts_utc BETWEEN ? AND ? "
+                f"HAVING MIN(r.ts_utc) < MAX(d.ts_utc)",
+                clock + clock,
             ),
         ]
     if h.link == "catchment->river":
         return [
             (
                 DEFINITIONS["extreme_discharge_rise"].wording,
-                f"SELECT point_id, MAX(discharge_m3s) AS mx, MIN(discharge_m3s) AS mn FROM "
+                f"SELECT MAX(discharge_m3s) AS mx, MIN(discharge_m3s) AS mn FROM "
                 f"{s}.hazard_timeline WHERE point_id IN ({river_pts}) AND discharge_m3s IS NOT "
-                f"NULL AND ts_utc BETWEEN '{t0}' AND '{t1}' GROUP BY point_id HAVING "
-                f"MAX(discharge_m3s) >= {rise} * MIN(discharge_m3s)",
+                f"NULL AND ts_utc BETWEEN ? AND ? HAVING MAX(discharge_m3s) >= 10 * "
+                f"MIN(discharge_m3s)",
+                clock,
             ),
             (
                 "daily discharge confirms the rise",
-                f"SELECT point_id, MAX(discharge_m3s) AS mx, MIN(discharge_m3s) AS mn FROM "
-                f"{s}.discharge_daily WHERE point_id IN ({river_pts}) AND date BETWEEN '{t0[:10]}' "
-                f"AND '{last_complete_day(t1)}' GROUP BY point_id HAVING MAX(discharge_m3s) >= "
-                f"{rise} * MIN(discharge_m3s)",
+                f"SELECT MAX(discharge_m3s) AS mx, MIN(discharge_m3s) AS mn FROM "
+                f"{s}.discharge_daily WHERE point_id IN ({river_pts}) AND date BETWEEN ? AND ? "
+                f"HAVING MAX(discharge_m3s) >= 10 * MIN(discharge_m3s)",
+                day,
             ),
             (
                 "a warning was issued for the river point",
                 f"SELECT point_id, MIN(ts_utc) AS first_utc FROM {s}.hazard_timeline WHERE "
                 f"point_id IN ({river_pts}) AND warning_level IS NOT NULL AND ts_utc BETWEEN "
-                f"'{t0}' AND '{t1}' GROUP BY point_id",
+                f"? AND ? GROUP BY point_id",
+                clock,
             ),
         ]
     if h.link == "river->site":
         return [
             (
                 "the footprint contains insured sites",
-                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint HAVING "
+                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint = 1 HAVING "
                 f"COUNT(*) >= 1",
+                (),
             ),
             (
                 "the footprint does not swallow every site (it is a footprint, not a region)",
-                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE NOT in_footprint HAVING "
+                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint = 0 HAVING "
                 f"COUNT(*) >= 1",
+                (),
             ),
             (
                 "sites in the footprint carry coordinates",
-                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint AND lat IS "
+                f"SELECT COUNT(*) AS n FROM {s}.exposure_join WHERE in_footprint = 1 AND lat IS "
                 f"NOT NULL AND lon IS NOT NULL HAVING COUNT(*) >= 1",
+                (),
             ),
         ]
     return []
@@ -162,15 +128,13 @@ def make(deps: Deps):
         hyps = [Hypothesis(**h) for h in state["hypotheses"]]
         new_ev: list[Evidence] = []
         model_id = None
-        pts, pts_ev, pts_note = resolve_points(deps, state)
-        new_ev.append(pts_ev)
         for h in hyps:
             ok, why = _generic_ok(h, state)
             rounds, qids, notes = 0, [], []
             if ok:
-                for name, sql in _checks_for(h, state, pts)[: settings.skeptic_max_rounds]:
+                for name, sql, params in _checks_for(h, state)[: settings.skeptic_max_rounds]:
                     rounds += 1
-                    e = deps.zetaris.run_sql(sql)
+                    e = deps.zetaris.run_sql(sql, params or None)
                     new_ev.append(e)
                     qids.append(e.query_id)
                     passed = e.row_count >= 1 and not e.error
@@ -180,11 +144,9 @@ def make(deps: Deps):
                         break
             verdict = "supported" if ok else "not_supported"
             rationale = why or "; ".join(notes)
-            if pts_note:
-                rationale = f"{rationale} | {pts_note}"
             try:  # optional model rationale from the same rows
                 text, model_id = deps.llm.complete(
-                    "deep",
+                    "fast",
                     SKEPTIC,
                     f"HYPOTHESIS {h.id} ({h.link}): {h.statement}\nCOUNTER-CHECKS:\n"
                     f"{rows_block(new_ev[-rounds:] if rounds else [])}\nDETERMINISTIC RESULT: "

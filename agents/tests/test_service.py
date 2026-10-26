@@ -41,7 +41,21 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(body["served_from"], "live")
         cfg = self.c.get("/config").json()
         self.assertIn("FF_HITL", cfg["flags"])
+        self.assertEqual(cfg["lanes"]["fast"], "meterless/fast")
         self.assertEqual(cfg["lanes"]["deep"], "meterless/deep")
+
+    def test_console_is_served_at_the_root(self) -> None:
+        r = self.c.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("text/html", r.headers["content-type"])
+        self.assertIn("FloodSense EU", r.text)
+        self.assertIn("Secondary operator page", r.text)
+        self.assertIn("no-store", r.headers["cache-control"])
+        self.assertEqual(self.c.get("/console").status_code, 200)
+
+    def test_the_static_desk_is_not_shipped(self) -> None:
+        for path in ("/app", "/app/", "/app/app.js", "/mock", "/mock/", "/mock/analyst", "/mock/data.js"):
+            self.assertEqual(self.c.get(path).status_code, 404, path)
 
     def test_ready_and_version(self) -> None:
         ready = self.c.get("/ready").json()
@@ -50,6 +64,25 @@ class ServiceTest(unittest.TestCase):
         ver = self.c.get("/version").json()
         self.assertIn("sha", ver)
         self.assertIn("built", ver)
+
+    def test_ready_is_503_when_the_probe_returns_an_error(self) -> None:
+        from floodsense_agents.models import Evidence
+        from floodsense_agents.zetaris import now_utc
+
+        class Down:
+            def run_sql(self, sql, params=None):
+                return Evidence(
+                    query_id="probe",
+                    view="?",
+                    sql=sql,
+                    executed_at_utc=now_utc(),
+                    error="connection reset by peer",
+                )
+
+        service.runtime().deps.zetaris = Down()
+        response = self.c.get("/ready")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("connection reset", response.json()["detail"])
 
     def test_run_review_approve(self) -> None:
         r = self.c.post(
@@ -64,8 +97,8 @@ class ServiceTest(unittest.TestCase):
         run = r.json()
         self.assertEqual(run["status"], "awaiting_approval")
         self.assertEqual(run["approval"]["status"], "awaiting")
-        self.assertEqual(run["served_from"], "replay")  # FakeZetaris backs it
-        self.assertIsNotNone(run["cached_at"])  # not live, so it is stamped
+        self.assertEqual(run["served_from"], "replay")
+        self.assertIsNotNone(run["cached_at"])
         for k in (
             "run_id",
             "thread_id",
@@ -123,6 +156,54 @@ class ServiceTest(unittest.TestCase):
         self.assertIn("event: trace", text)
         self.assertIn('"node": "watchers"', text)
         self.assertIn('"status": "awaiting_approval"', text)
+
+    def test_get_run_does_not_rebuild_the_checkpoint_index(self) -> None:
+        """GET /runs/{id} must not list every checkpoint.
+
+        _stored used to call past() -> _rebuild_index(), which walks the
+        whole checkpointer. That is what wedged a read behind a long POST.
+        """
+        rid = self.c.post("/runs", json={"question": "q", "event_id": "EMSR773"}).json()["run_id"]
+        body = self._get_run_counting_index_scans(rid)
+        self.assertEqual(body["run_id"], rid)
+        self.assertEqual(body["served_from"], "cache")
+        self.assertFalse(body["label"]["live"])
+
+    def test_get_run_after_restart_snapshots_only_that_run(self) -> None:
+        """A cold index (process restart) still must not list every checkpoint."""
+        rid = self.c.post("/runs", json={"question": "q", "event_id": "EMSR773"}).json()["run_id"]
+        service.runtime().index.clear()
+        body = self._get_run_counting_index_scans(rid)
+        self.assertEqual(body["served_from"], "cache")
+        self.assertEqual(body["run_id"], rid)
+        self.assertIn(rid, service.runtime().index)
+        self.assertEqual(len(service.runtime().index), 1)
+
+    def _get_run_counting_index_scans(self, rid: str) -> dict:
+        rt = service.runtime()
+        calls = {"rebuild": 0, "list": 0}
+        real_rebuild = rt._rebuild_index
+        real_list = rt.graph.checkpointer.list
+
+        def rebuild():
+            calls["rebuild"] += 1
+            return real_rebuild()
+
+        def list_checkpoints(*args, **kwargs):
+            calls["list"] += 1
+            return real_list(*args, **kwargs)
+
+        rt._rebuild_index = rebuild
+        rt.graph.checkpointer.list = list_checkpoints
+        try:
+            response = self.c.get(f"/runs/{rid}")
+        finally:
+            rt._rebuild_index = real_rebuild
+            rt.graph.checkpointer.list = real_list
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(calls["rebuild"], 0)
+        self.assertEqual(calls["list"], 0)
+        return response.json()
 
 
 if __name__ == "__main__":

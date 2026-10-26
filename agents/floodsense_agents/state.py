@@ -7,9 +7,10 @@ the pydantic models in models.py type them at the edges.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol, TypedDict
 
+from floodsense_agents.engines import NoWorld, WorldModel
 from floodsense_agents.models import Evidence, TraceEvent
 from floodsense_agents.nightshift import LLM
 from floodsense_agents.zetaris import Zetaris, now_utc
@@ -29,6 +30,8 @@ class Memory(Protocol):
 
 
 class NoMemory:
+    """No memory plugged in. The graph treats plain NoMemory as memory off."""
+
     def recall(self, request):
         return []
 
@@ -41,6 +44,7 @@ class Deps:
     zetaris: Zetaris
     llm: LLM
     memory: Memory
+    world: WorldModel = field(default_factory=NoWorld)  # engines sidecar; NoWorld = off
 
 
 class FloodState(TypedDict, total=False):
@@ -63,13 +67,15 @@ class FloodState(TypedDict, total=False):
     evidence: dict[str, dict[str, Any]]  # query_id -> Evidence
     provenance: list[dict[str, Any]]  # rows of the provenance view (layer b)
     claims: list[dict[str, Any]]  # Claim[]
+    memories: list[dict[str, Any]]  # H-MEM recall for this run: context, never evidence
+    thread: list[dict[str, Any]]  # earlier turns of this conversation: short-term memory
     summary: str
     judge_summary: dict[str, Any]  # JudgeSummary
     revise_rounds: int
     repair_rounds: int
     scope: dict[str, Any]  # the gate's verdict: can this run honestly answer
     status: str  # running | awaiting_approval | approved | rejected | failed
-    served_from: str  # live | cache | replay (cache/replay are set by the API layer)
+    served_from: str  # live | cache | replay. live only for a fresh live-schema read
     cached_at: str | None
     model_ids: list[str]
     error: str

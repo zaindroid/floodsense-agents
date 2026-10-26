@@ -17,6 +17,7 @@ os.environ.setdefault("LLM_MODE", "fake")
 from langgraph.checkpoint.memory import MemorySaver  # noqa: E402
 from langgraph.types import Command  # noqa: E402
 
+from floodsense_agents import labelling  # noqa: E402
 from floodsense_agents.events import spec  # noqa: E402
 from floodsense_agents.graph import PLANNED_NODES, build_graph  # noqa: E402
 from floodsense_agents.nightshift import FakeNightshift  # noqa: E402
@@ -45,6 +46,7 @@ def start(
         "lang": "en",
         "reviewer": None,
     }
+    served_from, cached_at = labelling.computation_label(replay_ts, live=False)
     out = graph.invoke(
         {
             "run_id": rid,
@@ -54,8 +56,8 @@ def start(
             "replay_ts": replay_ts,
             "request": req,
             "event": ev.as_dict(),
-            "served_from": "live",
-            "cached_at": None,
+            "served_from": served_from,
+            "cached_at": cached_at,
             "trace": [],
             "revise_rounds": 0,
             "repair_rounds": 0,
@@ -151,7 +153,8 @@ class GraphTest(unittest.TestCase):
             any(a["outbound"] for a in p["playbook"])
             and not any(a["released"] for a in p["playbook"])
         )
-        self.assertEqual(p["served_from"], "live")
+        self.assertEqual(p["served_from"], "replay")
+        self.assertIsNotNone(p["cached_at"])
         self.assertEqual(g.get_state(cfg).next, ("hitl",))
 
     def test_trace_events_follow_the_contract(self) -> None:

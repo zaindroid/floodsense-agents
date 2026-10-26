@@ -31,7 +31,7 @@ from floodsense_agents.zetaris import FakeZetaris, check_sql, now_utc  # noqa: E
 class BrokenExposure(FakeZetaris):
     """Every exposure_join query fails, the way a dropped connection would."""
 
-    def run_sql(self, sql: str) -> Evidence:
+    def run_sql(self, sql: str, params: tuple[str, ...] | None = None) -> Evidence:
         if "exposure_join" in sql:
             return Evidence(
                 query_id=str(uuid.uuid4()),
@@ -43,7 +43,7 @@ class BrokenExposure(FakeZetaris):
                 source="zetaris-fake",
                 error="connection reset by peer",
             )
-        return super().run_sql(sql)
+        return super().run_sql(sql, params)
 
 
 def _run(zetaris=None, **req) -> dict:
@@ -137,10 +137,32 @@ class B3ReplayClockTest(unittest.TestCase):
             with self.assertRaises(ValidationError, msg=bad):
                 RunRequest(question="q", replay_ts=bad)
 
-    def test_a_real_instant_is_accepted(self) -> None:
-        for good in ("2024-10-29T16:00:00Z", "2024-10-29T16:00Z"):
-            self.assertEqual(RunRequest(question="q", replay_ts=good).replay_ts, good)
+    def test_a_real_instant_is_accepted_and_normalised(self) -> None:
+        self.assertEqual(
+            RunRequest(question="q", replay_ts="2024-10-29T16:00:00Z").replay_ts,
+            "2024-10-29T16:00:00Z",
+        )
+        self.assertEqual(
+            RunRequest(question="q", replay_ts="2024-10-29T16:00Z").replay_ts,
+            "2024-10-29T16:00:00Z",
+        )
+        self.assertEqual(
+            RunRequest(question="q", replay_ts="2024-10-29 16:00:00Z").replay_ts,
+            "2024-10-29T16:00:00Z",
+        )
         self.assertIsNone(RunRequest(question="q", replay_ts="").replay_ts)
+
+    def test_a_clock_is_bound_and_a_raw_fragment_is_refused(self) -> None:
+        z = FakeZetaris()
+        ev = z.run_sql(
+            "SELECT COUNT(*) AS n FROM floodsense_seed.hazard_timeline WHERE ts_utc <= ?",
+            ("2024-10-29T12:00:00Z",),
+        )
+        self.assertIsNone(ev.error)
+        self.assertNotIn("?", ev.sql)
+        self.assertIn("2024-10-29T12:00:00Z", ev.sql)
+        bad = z.run_sql("SELECT 1 FROM floodsense_seed.hazard_timeline WHERE ts_utc <= ?", ("' OR 1=1 --",))
+        self.assertIsNotNone(bad.error)
 
     def test_a_with_that_then_mutates_is_refused(self) -> None:
         for bad in (

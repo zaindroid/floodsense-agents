@@ -1,9 +1,9 @@
 """The gate that lets the agents decline.
 
 An agent that answers everything is an agent whose answers mean nothing.
-The four contract views cover two events and one portfolio; a question
-about the Rhine at Köln is not a hard question, it is a question this run
-holds no data for, and the honest reply is to say so and stop.
+The contract views cover two events, one portfolio, and Rhine gauge levels.
+A question about the Rhine at Köln during a Valencia run is still declined:
+the gate follows the event vocabulary, not every table the warehouse holds.
 
 The rule is deliberately narrow, because refusing a fair question is worse
 than answering a vague one:
@@ -152,6 +152,11 @@ _NOT_PLACES = {
     "openstreetmap",
     "osm",
     "zetaris",
+    "pegelonline",
+    "pegel",
+    "wsv",
+    "itzbund",
+    "gdws",
     "nightshift",
     "floodsense",
     "emsr773",
@@ -219,8 +224,8 @@ def check(question: str, event_id: str) -> dict:
         "elsewhere": None,
         "asked": sorted(asked),
         "reason": _sentence(
-            f"nothing in this run covers {', '.join(sorted(asked))}. The agents read four "
-            f"views only: {', '.join(CONTRACT_VIEWS)}, which hold "
+            f"nothing in this run covers {', '.join(sorted(asked))}. The agents read "
+            f"{len(CONTRACT_VIEWS)} views only: {', '.join(CONTRACT_VIEWS)}, which hold "
             f"{', '.join(spec(e).region for e in EVENTS)}."
         ),
     }

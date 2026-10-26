@@ -2,8 +2,10 @@
 
 Outbound actions (anything that contacts a person or an authority) are marked
 and wait for the human. The deterministic path writes a standard set from the
-exposure; the model, when available, writes richer ones and is validated
-against the claim ids.
+exposure; the fast lane, when available, writes richer ones and is validated
+against the claim ids. A model action that cites no claim of this run is
+dropped: every action has to rest on cited evidence (GAMEPLAN v0.6.0). A repair
+round, after the Judge flags a claim, stays on the deep lane.
 
 It also owns the repair round: when the Judge flags a claim, the Playbook
 rewrites or shortens it to what its evidence shows. Nothing is deleted.
@@ -90,6 +92,7 @@ def make(deps: Deps):
         actions = _deterministic(state)
         model_id = "deterministic"
         lane = "none"
+        uncited = 0
         try:
             user = (
                 f"CHAIN: {state.get('summary')}\nHYPOTHESES: "
@@ -99,11 +102,11 @@ def make(deps: Deps):
                 + f"\nEXPOSURE: {state.get('exposure')}"
             )
             text, model_id = deps.llm.complete(
-                "deep", PLAYBOOK.replace("{lang}", state["request"].get("lang", "en")), user
+                "fast", PLAYBOOK.replace("{lang}", state["request"].get("lang", "en")), user
             )
             js = parse_json(text)
             ids = {c["claim_id"] for c in state["claims"]}
-            got = [
+            drafted = [
                 PlaybookAction(
                     action_id=str(a["action_id"]),
                     horizon_h=a["horizon_h"] if a.get("horizon_h") in (6, 24, 72) else 24,
@@ -113,8 +116,12 @@ def make(deps: Deps):
                 )
                 for a in js.get("actions", [])
             ]
+            # An action that cites nothing (or only claim ids this run does not
+            # have) rests on no evidence. It is dropped rather than shown.
+            got = [a for a in drafted if a.claim_ids]
+            uncited = len(drafted) - len(got)
             if got:
-                actions, lane = got, "deep"
+                actions, lane = got, "fast"
         except Exception as e:
             log.warning("playbook: model step skipped (%s)", str(e)[:120])
         return {
@@ -124,7 +131,7 @@ def make(deps: Deps):
                 state,
                 "playbook",
                 f"{len(actions)} actions, {sum(a.outbound for a in actions)} outbound (await "
-                f"approval)",
+                f"approval)" + (f"; {uncited} uncited draft(s) dropped" if uncited else ""),
                 lane=lane,
                 model_id=model_id,
                 started=t,

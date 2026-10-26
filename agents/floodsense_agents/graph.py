@@ -3,8 +3,14 @@
     scope ─┬─ out of scope → END (declined, no data read, no model call)
            └─ watchers → investigator → skeptic ─┬─ not_supported & no revise yet → revise → investigator
                                        └─ → exposure → playbook → judge ─┬─ flagged & repair left → playbook (repair) → judge
-                                                                          └─ → hitl (interrupt) → END
+                                                                          └─ → hitl (interrupt) → learn → END
 FF_SKEPTIC=false skips the Skeptic, FF_JUDGE=false skips the Judge, FF_HITL=false auto-approves (dev only).
+
+The engines sidecar (ENGINES_URL, engines/) joins in three places. The Watchers,
+Investigator and Skeptic write what they found to the World Model board
+(nodes/world_model.py). Behind FF_HMEM, the Investigator first recalls past
+approved findings, and Learn stores an approved or edited run (nodes/memory.py).
+Each write adds a trace event. With ENGINES_URL unset the graph runs as before.
 
     graph = build_graph(deps, checkpointer)
     out = graph.invoke({"run_id": rid, "request": req, "event": event}, {"configurable": {"thread_id": rid}})
@@ -20,15 +26,18 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from floodsense_agents import hitl as hitl_mod
+from floodsense_agents.engines import NoWorld, build_engines
 from floodsense_agents.nightshift import build_llm
 from floodsense_agents.nodes import (
     exposure,
     investigator,
     judge,
+    memory,
     playbook,
     scope,
     skeptic,
     watchers,
+    world_model,
 )
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, NoMemory
@@ -43,11 +52,18 @@ PLANNED_NODES: tuple[str, ...] = (
     "playbook",
     "judge",
     "hitl",
+    "learn",
 )
 
 
 def build_deps() -> Deps:
-    return Deps(zetaris=build_zetaris(), llm=build_llm(), memory=NoMemory())
+    engines = build_engines()
+    return Deps(
+        zetaris=build_zetaris(),
+        llm=build_llm(),
+        memory=engines if engines is not None and settings.ff_hmem else NoMemory(),
+        world=engines if engines is not None else NoWorld(),
+    )
 
 
 def build_graph(
@@ -62,11 +78,17 @@ def build_graph(
     use_judge = settings.ff_judge if ff_judge is None else ff_judge
 
     g = StateGraph(FloodState)
-    g.add_node("watchers", watchers.make(deps))
-    g.add_node("investigator", investigator.make(deps))
+    g.add_node("watchers", world_model.recording(watchers.make(deps), deps, "watchers"))
+    g.add_node(
+        "investigator",
+        world_model.recording(
+            memory.recalling(investigator.make(deps), deps), deps, "investigator"
+        ),
+    )
     g.add_node("exposure", exposure.make(deps))
     g.add_node("playbook", playbook.make(deps))
     g.add_node("hitl", hitl_mod.hitl)
+    g.add_node("learn", memory.make_learn(deps))
     # The gate runs before anything reads data or calls a model: a question
     # these views cannot answer is declined, not attempted.
     g.add_node("scope", scope.make())
@@ -77,7 +99,7 @@ def build_graph(
     g.add_edge("watchers", "investigator")
 
     if use_skeptic:
-        g.add_node("skeptic", skeptic.make(deps))
+        g.add_node("skeptic", world_model.recording(skeptic.make(deps), deps, "skeptic"))
         g.add_node("revise", skeptic.bump_revise)
         g.add_edge("investigator", "skeptic")
         g.add_conditional_edges(
@@ -96,5 +118,6 @@ def build_graph(
         )
     else:
         g.add_edge("playbook", "hitl")
-    g.add_edge("hitl", END)
+    g.add_edge("hitl", "learn")
+    g.add_edge("learn", END)
     return g.compile(checkpointer=checkpointer or MemorySaver())

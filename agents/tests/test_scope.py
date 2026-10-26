@@ -32,9 +32,9 @@ class Counting(FakeZetaris):
         super().__init__()
         self.queries = 0
 
-    def run_sql(self, sql):
+    def run_sql(self, sql, params=None):
         self.queries += 1
-        return super().run_sql(sql)
+        return super().run_sql(sql, params)
 
 
 class ScopeRuleTest(unittest.TestCase):
@@ -71,6 +71,7 @@ class ScopeRuleTest(unittest.TestCase):
         self.assertIsNone(verdict["elsewhere"])
         self.assertIn("rhine", verdict["reason"].lower())
         self.assertIn("hazard_timeline", verdict["reason"])
+        self.assertIn("gauge_levels", verdict["reason"])
         self.assertIn("Valencia", verdict["reason"])
 
     def test_a_refusal_is_written_as_a_sentence(self) -> None:
@@ -93,6 +94,11 @@ class ScopeRuleTest(unittest.TestCase):
         ):
             self.assertTrue(self.accepts(q), q)
         self.assertTrue(self.accepts("What was known by 15:00 UTC on 14 July 2021?", "EMSR517"))
+
+    def test_a_named_gauge_provider_is_not_a_place(self) -> None:
+        # PEGELONLINE is a source behind gauge_levels, not a town this run lacks.
+        self.assertTrue(self.accepts("What did Pegelonline report for our sites?"))
+        self.assertTrue(self.accepts("What does Wsv publish on the gauges?"))
 
     def test_the_gate_reads_the_event_rather_than_a_hard_coded_list(self) -> None:
         # Asking the Ahr case about the Ahr is fine; the vocabulary follows

@@ -8,8 +8,9 @@ Per claim:
   citation_faithful  layer (a) query_id exists and returned rows; layer (c) quote hash matches   deterministic
   numbers_match      every number in the claim is in its cited rows (relative tolerance NUMERIC_TOLERANCE)   deterministic
   licence_ok         no full text shown from a pointer-only source                               deterministic
-  grounding          supported | partial | unsupported — deep Nemotron lane seeing only the claim and its evidence;
-                     offline fallback derives it from the deterministic checks
+  grounding          supported | partial | unsupported — deep lane seeing only the claim and its evidence;
+                     a reply that will not parse, or that has no grounding, falls back to the deterministic checks
+                     and records model_id deterministic
   score              0.4 grounding + 0.2 coverage + 0.2 faithful + 0.2 numbers
 
 State: judge[] = one JudgeScore per claim (contract); judge_summary = overall, hallucination_rate (unsupported / n),
@@ -81,7 +82,7 @@ def score_claim(c: Claim, evidence: dict[str, Evidence], deps: Deps | None) -> J
     grounding, rationale, model_id = None, "", "deterministic"
     if deps is not None and a:
         try:
-            text, model_id = deps.llm.complete(
+            text, answered_by = deps.llm.complete(
                 "deep",
                 JUDGE,
                 f"CLAIM {c.claim_id}: {c.text}\nNUMBERS: {c.numbers}\n\nCITED "
@@ -90,9 +91,11 @@ def score_claim(c: Claim, evidence: dict[str, Evidence], deps: Deps | None) -> J
             js = parse_json(text)
             if js.get("grounding") in _G:
                 grounding, rationale = js["grounding"], str(js.get("rationale", ""))[:300]
+                model_id = answered_by
         except Exception as e:
             log.debug("judge: model grounding skipped (%s)", str(e)[:100])
     if grounding is None:
+        # The reply did not parse, or it had no grounding. model_id stays deterministic.
         if not coverage or not faithful:
             grounding, rationale = (
                 "unsupported",

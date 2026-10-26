@@ -7,6 +7,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+# PEGELONLINE shortname and water. The Ahr joins the Rhine between Koblenz and Bonn.
+# feeds.py and the seed rows use this tuple. Do not keep a second copy of the names.
+RHINE_GAUGES: tuple[tuple[str, str], ...] = (
+    ("BONN", "RHEIN"),
+    ("KÖLN", "RHEIN"),
+    ("KOBLENZ", "RHEIN"),
+)
+
 
 @dataclass(frozen=True)
 class EventSpec:
@@ -31,6 +39,10 @@ class EventSpec:
     # Moments worth replaying the run at, so a reviewer can see what was
     # knowable when. Proposed from the seed; Saleeta and Urvashi confirm.
     moments: tuple[tuple[str, str], ...]
+    # PEGELONLINE stations this event may cite, as (shortname, water).
+    # Empty means the watchers do not query gauge_levels. A live pull is the
+    # last 30 days, so it does not overlap these frozen windows.
+    gauges: tuple[tuple[str, str], ...]
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -58,6 +70,7 @@ EVENTS: dict[str, EventSpec] = {
             ("2024-10-29T19:11:00Z", "ES-Alert reaches phones"),
             ("2024-10-30T06:00:00Z", "Copernicus publishes the footprint"),
         ),
+        (),
     ),
     "EMSR517": EventSpec(
         "EMSR517",
@@ -77,6 +90,7 @@ EVENTS: dict[str, EventSpec] = {
             ("2021-07-14T20:00:00Z", "The gauge stops reporting"),
             ("2021-07-15T06:00:00Z", "Copernicus publishes the footprint"),
         ),
+        RHINE_GAUGES,
     ),
 }
 ALIASES = {"valencia_2024": "EMSR773", "ahr_2021": "EMSR517"}

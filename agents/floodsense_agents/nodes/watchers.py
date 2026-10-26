@@ -1,8 +1,10 @@
-"""Watchers. Deterministic SQL over hazard_timeline.
+"""Watchers. Deterministic SQL over the contract views.
 
 Scans the event window, cut at replay_ts, so the Investigator starts from
-anomalies that each carry a query_id. Also loads the provenance view once
-for layer (b) citations. No model call.
+anomalies that each carry a query_id. Reads gauge_levels for that window
+when the event lists stations, and loads the provenance view once for
+layer (b) citations. An event with no stations skips the gauge query.
+Gauge rows stay evidence. They are not a new anomaly kind. No model call.
 """
 
 from __future__ import annotations
@@ -11,9 +13,10 @@ import time
 from datetime import datetime, timedelta
 
 from floodsense_agents.governance import DEFINITIONS
-from floodsense_agents.models import UTC_TS, Anomaly
+from floodsense_agents.models import Anomaly, normalize_utc
 from floodsense_agents.settings import settings
 from floodsense_agents.state import Deps, FloodState, add_evidence, trace
+from floodsense_agents.zetaris import run_sql_parallel
 
 
 def last_complete_day(end_utc: str) -> str:
@@ -38,27 +41,13 @@ def window(state: FloodState) -> tuple[str, str]:
     older build.
     """
     ev = state["event"]
-    end = state.get("replay_ts") or ev["window_to_utc"]
-    if not UTC_TS.match(str(end)):
-        raise ValueError(f"replay_ts is not a UTC instant: {end!r}")
-    return ev["window_from_utc"], min(end, ev["window_to_utc"])
-
-
-def peak_per_point(rows: list[dict]) -> list[dict]:
-    """One row per point, keeping the first.
-
-    The hazard queries are ordered by the value, so the first row a point
-    appears in is its peak. hazard_timeline repeats a daily discharge across
-    the 24 hours of its day, so the raw top rows were three copies of one
-    point reported as three anomalies.
-    """
-    seen: set[str] = set()
-    out: list[dict] = []
-    for r in rows:
-        if r["point_id"] not in seen:
-            seen.add(r["point_id"])
-            out.append(r)
-    return out
+    try:
+        end = normalize_utc(str(state.get("replay_ts") or ev["window_to_utc"]))
+        start = normalize_utc(str(ev["window_from_utc"]))
+        cap = normalize_utc(str(ev["window_to_utc"]))
+    except ValueError as e:
+        raise ValueError(f"replay_ts is not a UTC instant: {state.get('replay_ts')!r}") from e
+    return start, min(end, cap)
 
 
 def make(deps: Deps):
@@ -66,37 +55,55 @@ def make(deps: Deps):
         t = time.time()
         s = settings.schema
         rain_at = DEFINITIONS["anomaly_rain"]
-        day_at = DEFINITIONS["anomaly_rain_24h"]
         flow_at = DEFINITIONS["anomaly_discharge"]
         t0, t1 = window(state)
+        clock = (t0, t1)
         q = {
-            "rain": f"SELECT point_id, ts_utc, rain_mm FROM {s}.hazard_timeline WHERE ts_utc "
-            f"BETWEEN "
-            f"'{t0}' AND '{t1}' AND rain_mm >= {rain_at.value} ORDER BY rain_mm DESC",
-            # An hourly cell mean understates a convective peak, so the
-            # accumulation is the screen that sees this kind of event. Grouped
-            # per point, so each one reports the hour its total crossed.
-            "rain_24h": f"SELECT point_id, MIN(ts_utc) AS ts_utc, ROUND(MAX(acc), 1) AS "
-            f"rain_24h_mm FROM ("
-            f"SELECT point_id, ts_utc, SUM(rain_mm) OVER (PARTITION BY point_id ORDER BY ts_utc "
-            f"ROWS BETWEEN 23 PRECEDING AND CURRENT ROW) AS acc FROM {s}.hazard_timeline WHERE "
-            f"ts_utc BETWEEN '{t0}' AND '{t1}') z WHERE acc >= {day_at.value} GROUP BY point_id "
-            f"ORDER BY MAX(acc) DESC",
-            "discharge": f"SELECT point_id, ts_utc, discharge_m3s FROM {s}.hazard_timeline WHERE "
-            f"ts_utc BETWEEN "
-            f"'{t0}' AND '{t1}' AND discharge_m3s >= {flow_at.value} ORDER BY discharge_m3s DESC",
-            "warning": f"SELECT point_id, MIN(ts_utc) AS first_utc, warning_level FROM "
-            f"{s}.hazard_timeline "
-            f"WHERE ts_utc BETWEEN '{t0}' AND '{t1}' "
-            f"AND warning_level IS NOT NULL GROUP BY point_id, warning_level ORDER BY first_utc",
+            "rain": (
+                f"SELECT point_id, ts_utc, rain_mm FROM {s}.hazard_timeline WHERE ts_utc "
+                f"BETWEEN ? AND ? AND rain_mm >= {rain_at.value} ORDER BY rain_mm DESC",
+                clock,
+            ),
+            "discharge": (
+                f"SELECT point_id, ts_utc, discharge_m3s FROM {s}.hazard_timeline WHERE "
+                f"ts_utc BETWEEN ? AND ? AND discharge_m3s >= {flow_at.value} "
+                f"ORDER BY discharge_m3s DESC",
+                clock,
+            ),
+            "warning": (
+                f"SELECT point_id, MIN(ts_utc) AS first_utc, warning_level FROM "
+                f"{s}.hazard_timeline "
+                f"WHERE ts_utc BETWEEN ? AND ? "
+                f"AND warning_level IS NOT NULL GROUP BY point_id, warning_level ORDER BY first_utc",
+                clock,
+            ),
         }
-        evid = {k: deps.zetaris.run_sql(sql) for k, sql in q.items()}
-        prov = deps.zetaris.run_sql(
-            f"SELECT dataset, source_url, publisher, licence, attribution, fetched_at FROM "
-            f"{s}.provenance"
-        )
+        # Valencia lists none. The Ahr lists the Rhine gauges between Koblenz and Bonn.
+        if state["event"].get("gauges"):
+            q["gauges"] = (
+                f"SELECT station, water, ts_utc, level_cm, source FROM {s}.gauge_levels "
+                f"WHERE ts_utc BETWEEN ? AND ? ORDER BY station, ts_utc",
+                clock,
+            )
+        # View queries, in dict order, then provenance. None of them depend
+        # on another, so they run together. Evidence order follows this list.
+        ordered = [
+            *q.items(),
+            (
+                "provenance",
+                (
+                    f"SELECT dataset, source_url, publisher, licence, attribution, fetched_at FROM "
+                    f"{s}.provenance",
+                    None,
+                ),
+            ),
+        ]
+        ran = run_sql_parallel(deps.zetaris, [job for _name, job in ordered])
+        by_name = {name: evidence for (name, _job), evidence in zip(ordered, ran)}
+        evid = {name: by_name[name] for name in q}
+        prov = by_name["provenance"]
         items: list[Anomaly] = []
-        for r in peak_per_point(evid["rain"].rows_sample)[:5]:
+        for r in evid["rain"].rows_sample[:5]:
             items.append(
                 Anomaly(
                     id=f"A{len(items) + 1}",
@@ -109,20 +116,7 @@ def make(deps: Deps):
                     query_id=evid["rain"].query_id,
                 )
             )
-        for r in evid["rain_24h"].rows_sample[:3]:
-            items.append(
-                Anomaly(
-                    id=f"A{len(items) + 1}",
-                    kind="rain",
-                    point_id=r["point_id"],
-                    ts_utc=r["ts_utc"],
-                    value=r["rain_24h_mm"],
-                    unit="mm/24h",
-                    why=day_at.wording,
-                    query_id=evid["rain_24h"].query_id,
-                )
-            )
-        for r in peak_per_point(evid["discharge"].rows_sample)[:3]:
+        for r in evid["discharge"].rows_sample[:3]:
             items.append(
                 Anomaly(
                     id=f"A{len(items) + 1}",
@@ -154,7 +148,7 @@ def make(deps: Deps):
             "trace": trace(
                 state,
                 "watchers",
-                f"{len(items)} anomalies in window {t0[:16]}..{t1[:16]} ({len(evid)} hazard "
+                f"{len(items)} anomalies in window {t0[:16]}..{t1[:16]} ({len(evid)} view "
                 f"queries)",
                 lane="sql",
                 started=t,

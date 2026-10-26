@@ -14,10 +14,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-# Rung 06. The agents read these four and nothing else. zetaris.py builds them
+# Rung 06. The agents read these and nothing else. zetaris.py builds them
 # in the fake and expects them in the live warehouse; readiness checks that no
-# executed query reached past them.
-CONTRACT_VIEWS = ("hazard_timeline", "discharge_daily", "exposure_join", "provenance")
+# executed query reached past them. gauge_levels is the PEGELONLINE contract.
+# FF_LIVE_DATA stays off until v0.5, so the default schema is floodsense_seed.
+CONTRACT_VIEWS = (
+    "hazard_timeline",
+    "discharge_daily",
+    "exposure_join",
+    "gauge_levels",
+    "provenance",
+)
 
 
 @dataclass(frozen=True)
@@ -49,6 +56,12 @@ OWNERS: dict[str, Owner] = {
         steward="portfolio ops",
         releases="duty underwriter",
     ),
+    "gauge_levels": Owner(
+        view="gauge_levels",
+        owner="hazard data lead",
+        steward="ingestion",
+        releases="duty underwriter",
+    ),
     "provenance": Owner(
         view="provenance",
         owner="data governance",
@@ -75,38 +88,14 @@ class Definition:
     agreed_on: str | None = None  # None until the team signs it off
 
 
-# Numbers measured against floodsense.hazard_timeline on 2026-10-25, over the
-# whole loaded record (3,264 rows; 576 inside the EMSR773 window, 2,688
-# outside), so each screen is known to separate the event from the rest of the
-# record rather than merely to fire:
-#
-#   rain >= 15 mm/h      5 hours at 5 points inside, 0 outside
-#   24h rain >= 80 mm    7 of 8 points inside, 0 outside
-#   discharge >= 100     peaks at 471 m3/s on 30 Oct
-#
-# The warehouse is gridded reanalysis, not gauges: a 0.25 deg cell averages
-# away the station peak, so the record tops out at 16.4 mm/h where Chiva
-# recorded far more. Station-scale numbers (AEMET calls 30-60 mm/h "muy
-# fuerte") cannot be reached by a cell mean and screened out the whole event.
-# A relative screen was tried and rejected: discharge rises 22-481x outside
-# the window as well, so "tripled within the window" fires always and
-# separates nothing.
 DEFINITIONS: dict[str, Definition] = {
     # Screening and corroboration ask different questions, so they carry
     # different numbers. Both are declared; neither is a loose literal.
     "anomaly_rain": Definition(
         term="anomaly_rain",
-        value=15,
+        value=30,
         unit="mm/h",
-        wording="hourly rain at or above 15 mm",
-        used_by="watchers",
-        owner="hazard data lead",
-    ),
-    "anomaly_rain_24h": Definition(
-        term="anomaly_rain_24h",
-        value=80,
-        unit="mm/24h",
-        wording="24-hour rain at or above 80 mm",
+        wording="hourly rain at or above 30 mm",
         used_by="watchers",
         owner="hazard data lead",
     ),
@@ -120,9 +109,9 @@ DEFINITIONS: dict[str, Definition] = {
     ),
     "extreme_rain": Definition(
         term="extreme_rain",
-        value=10,
+        value=20,
         unit="mm/h",
-        wording="rain was extreme (an hour >= 10 mm at a catchment point)",
+        wording="rain was extreme (an hour >= 20 mm at a catchment point)",
         used_by="skeptic",
         owner="hazard data lead",
     ),
@@ -155,13 +144,7 @@ DEFINITIONS: dict[str, Definition] = {
 
 @dataclass(frozen=True)
 class Product:
-    """Rung 08. Something a named consumer can depend on.
-
-    A promise to a consumer, not a claim about this process. The desk, the
-    record and the readiness report are served by the console that reads this
-    service, so readiness checks each route against the app that is running
-    rather than against this list.
-    """
+    """Rung 08. Something a named consumer can depend on."""
 
     name: str
     route: str
@@ -207,7 +190,7 @@ DATA_PRODUCTS: tuple[Product, ...] = (
     Product(
         name="desk",
         route="/desk/events",
-        consumer="the duty underwriter opening the app",
+        consumer="the duty underwriter opening the Vite console",
         promise="every known event, and the case standing on it",
         shape="EventSpec + case row",
         fields=("events",),

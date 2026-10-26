@@ -17,11 +17,13 @@ from floodsense_agents.checkpoints import build_checkpointer
 from floodsense_agents.events import spec
 from floodsense_agents.graph import build_deps, build_graph
 from floodsense_agents.hitl import approval_payload
-from floodsense_agents.settings import settings
 from floodsense_agents.models import ApprovalDecision, RunRequest
 from floodsense_agents.zetaris import now_utc
 
 log = logging.getLogger("floodsense.runtime")
+# Short-term thread memory: how much of a conversation a follow-up carries.
+THREAD_TURNS_MAX = 3
+TURN_SUMMARY_MAX = 600
 STATE_KEYS = (
     "run_id",
     "thread_id",
@@ -38,6 +40,8 @@ STATE_KEYS = (
     "request",
     "event",
     "claims",
+    "memories",
+    "thread",
     "summary",
     "judge_summary",
     "evidence",
@@ -56,6 +60,30 @@ class RunNotFound(KeyError):
 
 class NotAwaitingApproval(RuntimeError):
     pass
+
+
+class ThreadNotFound(KeyError):
+    pass
+
+
+def started_at(state: dict[str, Any]) -> str | None:
+    """When a run started: its first trace event. Survives a restart, unlike a clock read."""
+    trace = state.get("trace") or []
+    return trace[0].get("ts") if trace else None
+
+
+def turn_of(s: dict[str, Any]) -> dict[str, Any]:
+    """One earlier turn of a thread, as a follow-up sees it."""
+    approval = (s.get("approval") or {}).get("status")
+    return {
+        "run_id": s.get("run_id"),
+        "question": (s.get("request") or {}).get("question"),
+        "event_id": s.get("event_id"),
+        "status": s.get("status"),
+        "approval": approval,
+        "summary": (s.get("summary") or "")[:TURN_SUMMARY_MAX],
+        "at": started_at(s),
+    }
 
 
 class Runtime:
@@ -84,6 +112,8 @@ class Runtime:
             ("judge", []),
             ("trace", []),
             ("claims", []),
+            ("memories", []),
+            ("thread", []),
             ("model_ids", []),
             ("evidence", {}),
             ("exposure", {}),
@@ -97,8 +127,21 @@ class Runtime:
             "reviewer_note": None,
         }
         out["status"] = "awaiting_approval" if paused else v.get("status", "running")
-        out["served_from"] = v.get("served_from", "live")
-        out["cached_at"] = v.get("cached_at")
+        kind, at = labelling.computation_label(
+            v.get("replay_ts"), live=self._answers_are_live()
+        )
+        # A clocked replay stays replay. A stored "cache" mark must not hide
+        # the clock on the way out of the checkpointer.
+        stored = v.get("served_from")
+        if v.get("replay_ts"):
+            pass
+        elif stored == labelling.CACHE and v.get("cached_at"):
+            kind, at = labelling.CACHE, v.get("cached_at")
+        elif stored in labelling.KINDS and stored != labelling.LIVE:
+            kind = stored
+            at = v.get("cached_at") or at
+        out["served_from"] = kind
+        out["cached_at"] = at
         # Queries that errored. An answer resting on one of these is standing
         # on a hole, and the reviewer has to be told before deciding.
         out["failures"] = [
@@ -126,56 +169,71 @@ class Runtime:
             "cached_at": s["cached_at"],
         }
 
-    def _index_row(self, run_id: str) -> None:
-        s = self.snapshot(run_id)
+    def _remember(self, run_id: str, snap: dict[str, Any]) -> dict[str, Any]:
+        """Record one snapshot in the process index. Does not read the checkpointer."""
         now = now_utc()
-        row = self.index.get(run_id, {"run_id": run_id, "created_at": now})
+        # created_at comes from the run's own trace, so a rebuilt index after a
+        # restart keeps the real start time (cached_at labels read it).
+        row = self.index.get(run_id, {"run_id": run_id, "created_at": started_at(snap) or now})
         row.update(
-            status=s["status"],
-            question=(s.get("request") or {}).get("question"),
-            event_id=s.get("event_id"),
-            customer_id=s.get("customer_id"),
-            replay_ts=s.get("replay_ts"),
+            status=snap["status"],
+            thread_id=snap.get("thread_id") or run_id,
+            question=(snap.get("request") or {}).get("question"),
+            event_id=snap.get("event_id"),
+            customer_id=snap.get("customer_id"),
+            replay_ts=snap.get("replay_ts"),
             updated_at=now,
-            judge_overall=(s.get("judge_summary") or {}).get("overall"),
-            approval=(s.get("approval") or {}).get("status"),
-            served_from=s["served_from"],
-            cached_at=s["cached_at"],
+            judge_overall=(snap.get("judge_summary") or {}).get("overall"),
+            approval=(snap.get("approval") or {}).get("status"),
+            served_from=snap["served_from"],
+            cached_at=snap["cached_at"],
         )
         self.index[run_id] = row
+        return row
 
-    def _kind(self, req: RunRequest) -> str:
-        """What this run may call itself.
+    def _index_row(self, run_id: str) -> None:
+        self._remember(run_id, self.snapshot(run_id))
 
-        Live means both the warehouse and the model were the real ones and the
-        question was about now. A stand-in answers deterministically and a
-        replay_ts answers as of a past clock, and neither is live however
-        convincing the output reads.
+    def _answers_are_live(self) -> bool:
+        """True only for the live schema read through live Zetaris."""
+        zetaris = getattr(self.deps, "zetaris", None) if self.deps else None
+        return labelling.data_plane_is_live(zetaris)
+
+    def thread(self, thread_id: str) -> list[dict[str, Any]]:
+        """The last THREAD_TURNS_MAX turns of a conversation, oldest first.
+
+        A thread is the runs that share a thread_id; the first run's id names
+        it. An unknown thread is an error rather than a silent new thread, so
+        a client continuing a conversation hears when it is not.
         """
-        deps = self.deps
-        real = bool(
-            deps
-            and getattr(deps.zetaris, "live", False)
-            and getattr(deps.llm, "live", False)
-        )
-        return labelling.LIVE if real and not req.replay_ts else labelling.REPLAY
+        self._rebuild_index()
+        rows = [r for r in self.index.values() if r.get("thread_id") == thread_id]
+        if not rows:
+            raise ThreadNotFound(thread_id)
+        rows.sort(key=lambda r: r.get("created_at") or "")
+        return [turn_of(self.snapshot(r["run_id"])) for r in rows[-THREAD_TURNS_MAX:]]
 
     def start(self, req: RunRequest) -> dict[str, Any]:
         run_id = uuid.uuid4().hex[:12]
         ev = spec(req.event_id)
-        kind = self._kind(req)
+        thread_id = req.thread_id or run_id
+        turns = self.thread(req.thread_id) if req.thread_id else []
+        served_from, cached_at = labelling.computation_label(
+            req.replay_ts, live=self._answers_are_live()
+        )
         try:
             self.graph.invoke(
                 {
                     "run_id": run_id,
-                    "thread_id": run_id,
+                    "thread_id": thread_id,
+                    "thread": turns,
                     "event_id": ev.event_id,
                     "customer_id": req.customer_id,
                     "replay_ts": req.replay_ts,
                     "request": req.model_dump(),
                     "event": ev.as_dict(),
-                    "served_from": kind,
-                    "cached_at": None if kind == labelling.LIVE else now_utc(),
+                    "served_from": served_from,
+                    "cached_at": cached_at,
                     "trace": [],
                     "revise_rounds": 0,
                     "repair_rounds": 0,
@@ -195,13 +253,9 @@ class Runtime:
             raise NotAwaitingApproval(f"run {run_id} is {s['status']}, not awaiting approval")
         self.graph.invoke(Command(resume=decision.model_dump()), self.cfg(run_id))
         out = self.snapshot(run_id)
-        # N1: store ran on every approval, FF_HMEM or not. NoMemory made that
-        # a no-op; a real memory would have written behind a flag that is off.
-        if out["status"] == "approved" and self.deps is not None and settings.ff_hmem:
-            try:
-                self.deps.memory.store(run_id, out["request"], out["claims"], out["approval"])
-            except Exception as e:
-                log.warning("memory.store failed: %s", str(e)[:120])
+        # N1: store used to run here on every approval, FF_HMEM or not. It now
+        # runs in the graph's Learn node (nodes/memory.py), behind FF_HMEM, so
+        # the write shows on the trace and a resumed graph stores exactly once.
         self._index_row(run_id)
         return out
 
@@ -217,6 +271,9 @@ class Runtime:
         if saver is None or not hasattr(saver, "list"):
             return False
         try:
+            # Copy the ids out first. SqliteSaver.list holds its lock until
+            # this generator is closed, and _index_row reads the same saver.
+            pending: list[str] = []
             seen = set()
             for item in saver.list(None):
                 thread = (getattr(item, "config", None) or {}).get("configurable", {})
@@ -224,6 +281,8 @@ class Runtime:
                 if not run_id or run_id in seen or run_id in self.index:
                     continue
                 seen.add(run_id)
+                pending.append(run_id)
+            for run_id in pending:
                 try:
                     self._index_row(run_id)
                 except Exception:  # noqa: BLE001 - a partial checkpoint is not fatal
@@ -233,9 +292,10 @@ class Runtime:
             log.warning("could not read past runs from the checkpointer: %s", str(e)[:120])
             return False
 
-    def past(self, limit: int = 50) -> list[dict[str, Any]]:
+    def past(self, limit: int = 50, thread_id: str | None = None) -> list[dict[str, Any]]:
         whole = self._rebuild_index()
-        rows = sorted(self.index.values(), key=lambda r: r["updated_at"], reverse=True)[:limit]
+        rows = [r for r in self.index.values() if not thread_id or r.get("thread_id") == thread_id]
+        rows = sorted(rows, key=lambda r: r["updated_at"], reverse=True)[:limit]
         for r in rows:
             r["scope"] = "all runs on this checkpointer" if whole else "this process only"
         return rows

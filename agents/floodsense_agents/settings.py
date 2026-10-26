@@ -31,10 +31,12 @@ class Settings:
         "ZETARIS_MODE", "auto"
     )  # auto | live | fake   (fake = in-memory seed views, no network)
     zetaris_row_limit: int = int(_env("ZETARIS_ROW_LIMIT", "5000"))
+    # Independent SELECTs in one node. 8 covers Watchers (5), Investigator (5),
+    # and Exposure (3). 1 runs that fan-out one statement at a time.
+    zetaris_max_parallel: int = int(_env("ZETARIS_MAX_PARALLEL", "8"))
     live_data: bool = _flag("FF_LIVE_DATA", False)  # floodsense.* instead of floodsense_seed.*
 
-    # Nightshift (Meterless): every LLM call goes through one client. A lane is a
-    # routing mode, not a model: Nightshift picks the model behind it.
+    # Nightshift (Meterless): every LLM call goes through one client on pinned lanes
     meterless_base_url: str | None = _env("METERLESS_BASE_URL")
     meterless_app: str = _env("METERLESS_APP", "floodsense-eu")
     meterless_scope: str = _env("METERLESS_SCOPE", "user")
@@ -46,10 +48,19 @@ class Settings:
         "LLM_MODE", "auto"
     )  # auto | live | fake   (fake = deterministic offline model)
 
+    # Engines sidecar (engines/): H-MEM and the World Model. Unset = off.
+    engines_url: str | None = _env("ENGINES_URL")
+    engines_timeout_s: float = float(_env("ENGINES_TIMEOUT_S", "5"))
+    hmem_recall_top_n: int = int(_env("HMEM_RECALL_TOP_N", "3"))
+    # 0 while the engines embed with their reference hash; see engines.RECALL_POOL
+    hmem_recall_threshold: float = float(_env("HMEM_RECALL_THRESHOLD", "0"))
+
     # Feature flags (defaults from agents/.env.example; a slipped increment stays behind its flag)
     ff_skeptic: bool = _flag("FF_SKEPTIC", True)
     ff_hitl: bool = _flag("FF_HITL", True)
-    ff_judge: bool = _flag("FF_JUDGE", False)
+    # On, matching agents/.env.example. A process with the variable unset
+    # follows that file; tests that need the judge off pass ff_judge=False.
+    ff_judge: bool = _flag("FF_JUDGE", True)
     ff_hmem: bool = _flag("FF_HMEM", False)
     ff_rag_docs: bool = _flag("FF_RAG_DOCS", False)
 
@@ -78,6 +89,26 @@ class Settings:
     @property
     def schema(self) -> str:
         return "floodsense" if self.live_data else "floodsense_seed"
+
+    def lane(self, name: str) -> str:
+        """The routing id for one lane.
+
+        This is the only place the app chooses ``meterless/fast`` or
+        ``meterless/deep``. The map from those ids to the model that answers
+        today lives in ``docs/architecture/c4.md``. A value set in the
+        environment after import is used; otherwise the field, which tests
+        can assign.
+        """
+        if name == "fast":
+            env_name, field, default = "MODEL_FAST", self.model_fast, "meterless/fast"
+        elif name == "deep":
+            env_name, field, default = "MODEL_DEEP", self.model_deep, "meterless/deep"
+        else:
+            raise KeyError(name)
+        raw = os.environ.get(env_name)
+        if raw:
+            return raw
+        return field or default
 
 
 settings = Settings()

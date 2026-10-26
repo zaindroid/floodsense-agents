@@ -10,26 +10,29 @@ Fake  the same views as in-memory SQLite, so the graph, the tests and the UI
       from public reporting plus a synthetic portfolio, pending real migrations.
 
 Views, as in the contract; schema floodsense_seed.* or floodsense.* via
-FF_LIVE_DATA:
+FF_LIVE_DATA (default false; live as the default is v0.5):
   hazard_timeline(point_id, ts_utc, rain_mm, discharge_m3s, warning_level)
   discharge_daily(point_id, date, discharge_m3s, source)
-  exposure_join(policy_id, site_id, lat, lon, in_footprint, sum_insured_eur, segment, synthetic)
+  exposure_join(policy_id, site_id, lat, lon, in_footprint, sum_insured_eur, segment)
+  gauge_levels(station, water, ts_utc, level_cm, source)
   provenance(dataset, source_url, publisher, licence, attribution, fetched_at)
 The nodes use nothing else, so switching to the live views is FF_LIVE_DATA plus credentials.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import sqlite3
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Protocol, Sequence
 
 import httpx
 
+from floodsense_agents.events import EVENTS
 from floodsense_agents.models import Evidence
 from floodsense_agents.settings import settings
 
@@ -43,11 +46,6 @@ _FORBIDDEN = re.compile(
     r"pragma|vacuum|grant|revoke|reindex|begin|commit|rollback)\b",
     re.I,
 )
-
-
-# How many rows an Evidence carries. A listing query states its own total
-# separately; anything longer than this is an excerpt, not the whole answer.
-ROWS_KEPT = 20
 
 
 def check_sql(sql: str) -> str:
@@ -76,70 +74,158 @@ def _view_of(sql: str) -> str:
     return m.group(1) if m else "?"
 
 
-def _engine_of(response, js) -> str:
-    """Which engine answered.
+# Bound clocks only. A replay timestamp is normalised before it gets here,
+# and a date is the YYYY-MM-DD prefix of one. Anything else is refused.
+_BOUND = re.compile(r"^(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z|\d{4}-\d{2}-\d{2})$")
 
-    Zetaris itself says nothing; a compatible endpoint names itself, on the
-    X-Engine header or in the body. We record what it said, so a run can be
-    audited without taking "it reached Zetaris" on trust.
+
+def inline_bound(sql: str, params: tuple[str, ...] | list[str] | None) -> tuple[str, tuple[str, ...]]:
+    """Split a statement into the placeholder form and a rendered copy.
+
+    SQLite runs the placeholder form with the tuple. The live SQL API has no
+    parameter channel, so it receives the rendered copy. Rendering quotes only
+    values that already match the clock or date pattern, so a replay clock
+    cannot change the statement.
     """
-    name = response.headers.get("X-Engine") or (js.get("engine") if isinstance(js, dict) else "")
-    name = (name or "").strip()
-    if not name or name.lower() == "zetaris":
-        return "zetaris"
-    return f"zetaris-compatible:{name}"
+    bound = tuple(params or ())
+    if not bound:
+        if "?" in sql:
+            raise ValueError("sql has placeholders but no parameters")
+        return sql, ()
+    for value in bound:
+        if not isinstance(value, str) or not _BOUND.fullmatch(value):
+            raise ValueError("bound parameters must be normalised UTC instants or dates")
+    parts = sql.split("?")
+    if len(parts) != len(bound) + 1:
+        raise ValueError("placeholder count does not match parameters")
+    rendered: list[str] = []
+    for part, value in zip(parts, bound):
+        rendered.append(part)
+        rendered.append("'" + value + "'")
+    rendered.append(parts[-1])
+    return "".join(rendered), bound
 
 
 class Zetaris(Protocol):
-    def run_sql(self, sql: str) -> Evidence: ...
+    def run_sql(self, sql: str, params: tuple[str, ...] | None = None) -> Evidence: ...
 
 
-# A statement the engine refused names an error class in brackets, or says
-# what it expected. Anything else in a 400 is about the caller, not the SQL.
-_STATEMENT_ERROR = re.compile(r"\[[A-Z][A-Z0-9_.]+]|wrong type|expecting", re.I)
+def _failed_evidence(sql: str, exc: BaseException) -> Evidence:
+    """A job that raised, in the same shape as a query Zetaris could not run."""
+    return Evidence(
+        query_id=str(uuid.uuid4()),
+        view=_view_of(sql),
+        sql=sql,
+        rows_sample=[],
+        row_count=0,
+        executed_at_utc=now_utc(),
+        error=str(exc)[:300],
+    )
 
 
-def _token_rejected(r: httpx.Response) -> bool:
-    """Whether to log in again and retry.
+def run_sql_parallel(
+    client: Zetaris,
+    jobs: Sequence[tuple[str, tuple[str, ...] | None]],
+) -> list[Evidence]:
+    """Run independent SELECTs together. Result order matches ``jobs``.
 
-    Measured against the engine, because the status code does not say: a dead
-    token comes back 400, and has been seen as both {"msg":"Not Allowed"} and
-    {"msg":"Bad Request"}. Only a missing Authorization header is 401. A
-    refused statement is 400 as well, so a 400 counts as a token problem
-    unless the body names the statement -- matching the wordings instead
-    would mean a fourth one silently stops the retry, which is how a whole
-    session of queries failed with the token one re-login away.
+    Each job is the same ``run_sql`` a node would call on its own.
+    ``asyncio.gather`` starts them together, up to ``ZETARIS_MAX_PARALLEL``
+    at once (``1`` runs them one after another). The graph calls this from a
+    sync node, so this function owns the loop. If a loop is already running,
+    the gather moves to a worker thread and does not deadlock that loop.
+
+    A job that raises becomes ``Evidence.error`` and does not cancel the
+    others. A sequential loop would have stopped, but the siblings are
+    already started, and the graph already treats a failed query as evidence
+    with ``error`` set. ``KeyboardInterrupt`` still propagates.
     """
-    if r.status_code in (401, 403):
-        return True
-    if r.status_code != 400:
-        return False
-    return not _STATEMENT_ERROR.search(r.text)
+
+    async def _all() -> list[Evidence]:
+        limit = max(1, int(settings.zetaris_max_parallel))
+        gate = asyncio.Semaphore(limit)
+
+        async def _one(sql: str, params: tuple[str, ...] | None) -> Evidence:
+            # Omit a missing parameter tuple. Callers that override run_sql(sql)
+            # (the exposure string-coerce tests) still run.
+            async with gate:
+                if params:
+                    return await asyncio.to_thread(client.run_sql, sql, params)
+                return await asyncio.to_thread(client.run_sql, sql)
+
+        raw = await asyncio.gather(
+            *(_one(sql, params) for sql, params in jobs),
+            return_exceptions=True,
+        )
+        out: list[Evidence] = []
+        for (sql, _params), item in zip(jobs, raw):
+            if isinstance(item, Exception):
+                out.append(_failed_evidence(sql, item))
+            else:
+                out.append(item)
+        return out
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_all())
+
+    box: list[list[Evidence]] = []
+    error: list[BaseException] = []
+
+    def _in_thread() -> None:
+        try:
+            box.append(asyncio.run(_all()))
+        except BaseException as exc:
+            error.append(exc)
+
+    worker = threading.Thread(target=_in_thread, name="zetaris-parallel")
+    worker.start()
+    worker.join()
+    if error:
+        raise error[0]
+    return box[0]
 
 
 class ZetarisClient:
-    live = True
-
     def __init__(self) -> None:
         self.rest = (settings.zetaris_rest_url or "").rstrip("/")
         self._token: str | None = settings.zetaris_api_key
+        self._token_lock = threading.Lock()
 
     def _login(self) -> str:
         if settings.zetaris_api_key:
             return settings.zetaris_api_key
-        r = httpx.get(
-            f"{self.rest}/auth/login",
-            auth=(settings.zetaris_user or "", settings.zetaris_password or ""),
-            headers={"X-Org-ID": settings.zetaris_org_id, "X-Request-ID": str(uuid.uuid4())},
-            timeout=30,
-        )
-        r.raise_for_status()
-        self._token = r.json()["idToken"]
-        return self._token
+        with self._token_lock:
+            if self._token:
+                return self._token
+            r = httpx.get(
+                f"{self.rest}/auth/login",
+                auth=(settings.zetaris_user or "", settings.zetaris_password or ""),
+                headers={"X-Org-ID": settings.zetaris_org_id, "X-Request-ID": str(uuid.uuid4())},
+                timeout=30,
+            )
+            r.raise_for_status()
+            self._token = r.json()["idToken"]
+            return self._token
 
-    def run_sql(self, sql: str) -> Evidence:
+    def run_sql(self, sql: str, params: tuple[str, ...] | None = None) -> Evidence:
+        # A write is refused here, as an exception, before any request goes out.
         sql = check_sql(sql)
         qid = str(uuid.uuid4())
+        try:
+            sql, _bound = inline_bound(sql, params)
+            sql = check_sql(sql)
+        except ValueError as e:
+            return Evidence(
+                query_id=qid,
+                view=_view_of(sql),
+                sql=sql,
+                rows_sample=[],
+                row_count=0,
+                executed_at_utc=now_utc(),
+                error=str(e)[:300],
+            )
         body = {
             "queryId": qid,
             "sql": sql,
@@ -149,6 +235,9 @@ class ZetarisClient:
         try:
             for attempt in (0, 1):
                 token = self._token or self._login()
+                # TODO: a shared httpx.Client would reuse connections across the
+                # parallel fan-out. Left per call so one stuck socket does not
+                # pin the process.
                 r = httpx.post(
                     f"{self.rest}/sql-editor/sqls/run",
                     json=body,
@@ -159,22 +248,24 @@ class ZetarisClient:
                         "X-Request-ID": str(uuid.uuid4()),
                     },
                 )
-                if attempt == 0 and not settings.zetaris_api_key and _token_rejected(r):
-                    self._token = None
+                if attempt == 0 and not settings.zetaris_api_key and r.status_code in (401, 403):
+                    # Another call may already have logged in with a new token.
+                    # Clear only the token this request presented.
+                    with self._token_lock:
+                        if self._token == token:
+                            self._token = None
                     continue
                 if not r.is_success:
                     raise RuntimeError(f"Zetaris HTTP {r.status_code}: {r.text[:300]}")
                 break
-            js = r.json()
-            rows = self._rows(js)
+            rows = self._rows(r.json())
             return Evidence(
                 query_id=qid,
                 view=_view_of(sql),
                 sql=sql,
-                rows_sample=rows[:ROWS_KEPT],
+                rows_sample=rows[:20],
                 row_count=len(rows),
                 executed_at_utc=now_utc(),
-                source=_engine_of(r, js),
             )
         except Exception as e:
             log.warning("zetaris query failed: %s", str(e)[:200])
@@ -189,49 +280,16 @@ class ZetarisClient:
             )
 
     @staticmethod
-    def _typed(v):
-        """Give a value back its type.
-
-        Zetaris answers every column as a string: numbers as '61' or
-        '1.51465E8', booleans as 'true', timestamps as '2024-10-20 00:00:00.0'.
-        SQLite and Postgres answer with typed JSON, and the nodes count,
-        format and compare these values, so without this a run against Zetaris
-        fails on the first f"{x:,.0f}".
-
-        Converted only where it is unambiguous. A leading zero means an
-        identifier rather than a number, so '007' stays '007'; anything that
-        does not parse, timestamps included, is left exactly as it arrived.
-        """
-        if not isinstance(v, str):
-            return v
-        s = v.strip()
-        low = s.lower()
-        if low == "true":
-            return True
-        if low == "false":
-            return False
-        digits = s.lstrip("+-")
-        if not digits or (digits[0] == "0" and len(digits) > 1 and digits[1] not in ".eE"):
-            return v
-        try:
-            f = float(s)
-        except ValueError:
-            return v
-        return int(s) if digits.isdigit() else f
-
-    @classmethod
-    def _rows(cls, js) -> list[dict]:
+    def _rows(js) -> list[dict]:
         if isinstance(js, dict) and "data" in js:
             cols = [
                 c["name"] if isinstance(c, dict) else c
                 for c in (js.get("headers") or js.get("columns") or [])
             ]
-            rows = [dict(zip(cols, r)) if isinstance(r, list) else r for r in js["data"]]
-        elif isinstance(js, dict) and "rows" in js:
-            rows = js["rows"]
-        else:
-            rows = js if isinstance(js, list) else []
-        return [{k: cls._typed(v) for k, v in row.items()} for row in rows]
+            return [dict(zip(cols, r)) if isinstance(r, list) else r for r in js["data"]]
+        if isinstance(js, dict) and "rows" in js:
+            return js["rows"]
+        return js if isinstance(js, list) else []
 
 
 # Fake Zetaris: the contract views in SQLite. ATTACH gives the
@@ -239,9 +297,24 @@ class ZetarisClient:
 _DDL = """
 CREATE TABLE {s}.hazard_timeline(point_id TEXT, ts_utc TEXT, rain_mm REAL, discharge_m3s REAL, warning_level TEXT);
 CREATE TABLE {s}.discharge_daily(point_id TEXT, date TEXT, discharge_m3s REAL, source TEXT);
-CREATE TABLE {s}.exposure_join(policy_id TEXT, site_id TEXT, lat REAL, lon REAL, in_footprint INTEGER, sum_insured_eur REAL, segment TEXT, synthetic TEXT);
+CREATE TABLE {s}.exposure_join(policy_id TEXT, site_id TEXT, lat REAL, lon REAL, in_footprint INTEGER, sum_insured_eur REAL, segment TEXT);
+CREATE TABLE {s}.gauge_levels(station TEXT, water TEXT, ts_utc TEXT, level_cm REAL, source TEXT);
 CREATE TABLE {s}.provenance(dataset TEXT, source_url TEXT, publisher TEXT, licence TEXT, attribution TEXT, fetched_at TEXT);
 """
+
+def _gauge_seed_rows() -> list[tuple]:
+    """One row per station on each event that lists gauges. level_cm stays empty.
+
+    The station names are EventSpec.gauges, which for the Ahr is RHINE_GAUGES.
+    Events with an empty list contribute nothing. There is no second copy of
+    the station names here.
+    """
+    rows: list[tuple] = []
+    for event in EVENTS.values():
+        for station, water in event.gauges:
+            rows.append((station, water, event.window_from_utc, None, "seed:pegelonline"))
+    return rows
+
 
 # Valencia 29 Oct 2024 (seed, approximate): AEMET reported ~491 mm in ~8 h at
 # Chiva and ~185 mm in one hour at Turís; CHJ estimated the Poyo ravine peak
@@ -290,20 +363,20 @@ _SEED = {
         ("altenahr", "2021-07-14", 1000.0, "GloFAS via Open-Meteo"),
         ("altenahr", "2021-07-15", 210.0, "GloFAS via Open-Meteo"),
     ],
+    "gauge_levels": _gauge_seed_rows(),
     # Synthetic portfolio of the demo insurer around the EMSR773 footprint.
-    # in_footprint comes from the Copernicus layer. synthetic is the book's own
-    # flag, yes on every row, as migration 018 sets it live: this is not a real book.
+    # in_footprint comes from the Copernicus layer.
     "exposure_join": [
-        ("P-1001", "S-001", 39.4275, -0.4178, 1, 4_200_000, "warehouse", "yes"),
-        ("P-1002", "S-002", 39.4036, -0.4039, 1, 1_900_000, "retail", "yes"),
-        ("P-1003", "S-003", 39.4215, -0.3906, 1, 6_500_000, "retail", "yes"),
-        ("P-1004", "S-004", 39.4280, -0.3850, 1, 800_000, "retail", "yes"),
-        ("P-1005", "S-005", 39.4370, -0.4680, 1, 3_100_000, "industrial", "yes"),
-        ("P-1006", "S-006", 39.4360, -0.4350, 1, 2_400_000, "healthcare", "yes"),
-        ("P-1007", "S-007", 39.4720, -0.7200, 0, 1_200_000, "industrial", "yes"),
-        ("P-1008", "S-008", 39.4699, -0.3763, 0, 9_000_000, "office", "yes"),
-        ("P-1009", "S-009", 39.1900, -0.4350, 1, 2_700_000, "industrial", "yes"),
-        ("P-1010", "S-010", 39.4600, -0.3300, 0, 1_500_000, "hospitality", "yes"),
+        ("P-1001", "S-001", 39.4275, -0.4178, 1, 4_200_000, "warehouse"),
+        ("P-1002", "S-002", 39.4036, -0.4039, 1, 1_900_000, "retail"),
+        ("P-1003", "S-003", 39.4215, -0.3906, 1, 6_500_000, "retail"),
+        ("P-1004", "S-004", 39.4280, -0.3850, 1, 800_000, "retail"),
+        ("P-1005", "S-005", 39.4370, -0.4680, 1, 3_100_000, "industrial"),
+        ("P-1006", "S-006", 39.4360, -0.4350, 1, 2_400_000, "healthcare"),
+        ("P-1007", "S-007", 39.4720, -0.7200, 0, 1_200_000, "industrial"),
+        ("P-1008", "S-008", 39.4699, -0.3763, 0, 9_000_000, "office"),
+        ("P-1009", "S-009", 39.1900, -0.4350, 1, 2_700_000, "industrial"),
+        ("P-1010", "S-010", 39.4600, -0.3300, 0, 1_500_000, "hospitality"),
     ],
     "provenance": [
         (
@@ -354,13 +427,19 @@ _SEED = {
             "Synthetic insurer portfolio, clearly labelled",
             "2026-10-22",
         ),
+        (
+            "gauge_levels",
+            "https://www.pegelonline.wsv.de/",
+            "Wasserstrassen- und Schifffahrtsverwaltung des Bundes (WSV)",
+            "DL-DE->Zero-2.0",
+            "Quelle: WSV, PEGELONLINE",
+            "2026-10-24",
+        ),
     ],
 }
 
 
 class FakeZetaris:
-    live = False
-
     def __init__(self) -> None:
         self._conn = sqlite3.connect(":memory:", check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
@@ -374,22 +453,26 @@ class FakeZetaris:
                 )
         self._conn.commit()
 
-    def run_sql(self, sql: str) -> Evidence:
-        sql = check_sql(sql)
+    def run_sql(self, sql: str, params: tuple[str, ...] | None = None) -> Evidence:
+        # A write is refused here, as an exception. A bad clock comes back as
+        # Evidence.error so one predicate cannot take down the whole run.
+        placeholder = check_sql(sql)
         qid = str(uuid.uuid4())
         try:
+            rendered, bound = inline_bound(placeholder, params)
+            check_sql(rendered)
             with self._lock:
-                rows = [dict(r) for r in self._conn.execute(sql).fetchall()]
+                rows = [dict(r) for r in self._conn.execute(placeholder, bound).fetchall()]
             return Evidence(
                 query_id=qid,
-                view=_view_of(sql),
-                sql=sql,
-                rows_sample=rows[:ROWS_KEPT],
+                view=_view_of(rendered),
+                sql=rendered,
+                rows_sample=rows[:20],
                 row_count=len(rows),
                 executed_at_utc=now_utc(),
                 source="zetaris-fake",
             )
-        except sqlite3.Error as e:
+        except (sqlite3.Error, ValueError) as e:
             return Evidence(
                 query_id=qid,
                 view=_view_of(sql),

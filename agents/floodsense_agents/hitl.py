@@ -35,6 +35,10 @@ def approval_payload(state: FloodState) -> dict[str, Any]:
         "anomalies": state.get("anomalies", []),
         "hypotheses": state.get("hypotheses", []),
         "claims": state.get("claims", []),
+        # What H-MEM recalled for the Investigator. Context, not evidence.
+        "memories": state.get("memories", []),
+        # Earlier turns this follow-up builds on (short-term thread memory).
+        "thread": state.get("thread", []),
         "exposure": state.get("exposure", {}),
         "playbook": state.get("playbook", []),
         "judge": state.get("judge", []),
@@ -42,7 +46,7 @@ def approval_payload(state: FloodState) -> dict[str, Any]:
         "flagged_claim_ids": (state.get("judge_summary") or {}).get("flagged_claim_ids", []),
         # Queries that failed. The reviewer decides knowing what is missing.
         "failures": state.get("failures", []),
-        "served_from": state.get("served_from", "live"),
+        "served_from": state.get("served_from"),
         "cached_at": state.get("cached_at"),
         "model_ids": state.get("model_ids", []),
     }
