@@ -1,4 +1,10 @@
+# The engines run TypeScript directly and have no runtime dependencies,
+# so the node binary alone is the whole of what they need. Both images
+# are bookworm.
+FROM node:22.18-bookworm-slim AS node
+
 FROM python:3.12-slim
+COPY --from=node /usr/local/bin/node /usr/local/bin/node
 
 # Coolify runs its healthcheck inside the container and needs curl or wget.
 RUN apt-get update \
@@ -15,6 +21,15 @@ COPY console/*.py console/*.html ./console/
 COPY ui/mock ./ui/mock
 COPY ui/app ./ui/app
 
+# H-MEM and the World Model, mirrored from the monorepo's engines/.
+# vendor/ is the Meterless reference implementation, Apache-2.0, and
+# NOTICE travels with it.
+COPY engines/package.json engines/NOTICE /engines/
+COPY engines/src /engines/src
+COPY engines/vendor /engines/vendor
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 # Rewritten on every sync by .github/workflows/sync-from-monorepo.yml.
 ENV GIT_SHA=423deb17653597eb12609f337d91378e576a365a BUILT_AT=2026-10-26T00:33:57Z
 
@@ -26,5 +41,14 @@ ENV AGENTS_HOST=0.0.0.0 \
     FF_JUDGE=true \
     PYTHONUNBUFFERED=1
 
+# The engines carry no authentication, so they stay on loopback: only
+# this container's own console reaches them. .data survives a restart
+# but not a rebuild, which is the right lifetime for a demo's memory.
+ENV FF_HMEM=true \
+    ENGINES_URL=http://127.0.0.1:8300 \
+    ENGINES_HOST=127.0.0.1 \
+    ENGINES_PORT=8300 \
+    ENGINES_DATA_DIR=/engines/.data
+
 EXPOSE 8080
-CMD ["python", "-m", "console"]
+CMD ["/start.sh"]

@@ -1,7 +1,8 @@
 name: sync-from-monorepo
 
 # The service is owned in the monorepo; this repo is only its deploy mirror.
-# Pulls agents/ on a schedule, and the resulting push is what redeploys.
+# Pulls agents/ and engines/ on a schedule, and the resulting push is what
+# redeploys.
 
 on:
   schedule:
@@ -12,8 +13,8 @@ on:
 
 env:
   SOURCE_REPO: GenAI-Open-Agent-Hackathon/Hackathon-Monorepo
-  # Point this at main once the agents pull request is merged.
-  SOURCE_REF: feat/agents-live-data-integration
+  # main, since #21 and #23 landed everything this mirror used to carry.
+  SOURCE_REF: main
 
 jobs:
   sync:
@@ -43,13 +44,27 @@ jobs:
           git clone --quiet --depth 1 --branch "$SOURCE_REF" \
             "https://x-access-token:$TOKEN@github.com/$SOURCE_REPO.git" source
 
-      - name: Mirror the agents service
+      - name: Mirror the agents service and the engines
         id: mirror
         if: steps.clone.outputs.skip != 'true'
         run: |
+          # This test is this repository's own: it reads contracts/views.yaml,
+          # which the monorepo has and the mirror does not, so it skips here.
+          # A wholesale copy would drop it.
+          keep=agents/tests/test_view_contract.py
+          cp "$keep" /tmp/keep.py
           rm -rf agents
           cp -r source/agents agents
+          cp /tmp/keep.py "$keep"
           find agents -name __pycache__ -type d -prune -exec rm -rf {} +
+
+          # Only what the sidecar needs to run: it has no runtime
+          # dependencies and the image never builds or tests it.
+          rm -rf engines
+          mkdir -p engines
+          cp -r source/engines/src source/engines/vendor engines/
+          cp source/engines/package.json source/engines/NOTICE engines/
+
           sha=$(git -C source rev-parse HEAD)
           rm -rf source
 
@@ -64,7 +79,7 @@ jobs:
           sed -i "s|^ENV GIT_SHA=.*|ENV GIT_SHA=$sha BUILT_AT=$built|" Dockerfile
           git add -A
           git -c user.name="Zain Ul Haq" -c user.email="zainey4@gmail.com" \
-              commit -q -m "sync: agents at ${sha:0:12} from $SOURCE_REF"
+              commit -q -m "sync: agents and engines at ${sha:0:12} from $SOURCE_REF"
           git push
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
@@ -74,7 +89,7 @@ jobs:
           HOOK: ${{ secrets.DEPLOY_WEBHOOK }}
         run: |
           if [ -z "$HOOK" ]; then
-            echo "No DEPLOY_WEBHOOK secret. agents/ is now current in git,"
+            echo "No DEPLOY_WEBHOOK secret. The mirror is current in git,"
             echo "but the container still serves the previous code until"
             echo "someone redeploys. Pushes alone do not redeploy."
             exit 0
