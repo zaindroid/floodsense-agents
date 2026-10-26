@@ -8,6 +8,7 @@ stream would hang the suite the first time a run did not end.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 import unittest
@@ -71,6 +72,26 @@ class PipelineTest(unittest.TestCase):
         page = self.c.get("/pipeline/").text
         self.assertIn("Meterless Nightshift", page)
         self.assertIn("Zetaris", page)
+        # The engines are a sponsor requirement of their own, and the graph
+        # has had a learn step since the memory nodes landed.
+        self.assertIn("H-MEM", page)
+        self.assertIn("World model", page)
+        self.assertIn('key: "learn"', page)
+
+    def test_the_drawing_covers_every_stage_the_graph_builds(self) -> None:
+        """A node added to the graph but not here would run off the drawing."""
+        from floodsense_agents.graph import build_deps, build_graph
+
+        page = self.c.get("/pipeline/").text
+        drawn = set(re.findall(r'\{ key: "([a-z_]+)"', page)) | set(live.SIDE_TITLES)
+        built = set(build_graph(build_deps()).get_graph().nodes) - {"__start__", "__end__"}
+        self.assertEqual(built - drawn - {"revise"}, set())
+
+    def test_the_side_channel_nodes_are_named_for_a_reader(self) -> None:
+        # readiness.AGENTS stops at the seven agents, so these would show up
+        # on the page as bare node ids without this map.
+        for node in ("memory", "world_model", "learn"):
+            self.assertNotEqual(live._title(node), node, node)
 
     def test_a_launch_answers_before_the_run_finishes(self) -> None:
         r = self.c.post("/pipeline/runs", json={"event_id": "EMSR773"})

@@ -143,6 +143,21 @@ def _query_event(ev: dict[str, Any], at: int) -> dict[str, Any]:
     }
 
 
+# Trace nodes that are not one of the seven agents: H-MEM recall, the World
+# Model board write, and the learn step after the human decides.
+# readiness.AGENTS is the service's own list and stops at the agents, so these
+# are named here rather than by editing a file this repository mirrors.
+SIDE_TITLES = {
+    "memory": "Memory recall",
+    "world_model": "World model",
+    "learn": "Memory write",
+}
+
+
+def _title(node: str) -> str:
+    return SIDE_TITLES.get(node) or title_of(node)
+
+
 def _step_event(entry: dict[str, Any], at: int) -> dict[str, Any]:
     node = entry.get("node") or ""
     return {
@@ -150,7 +165,7 @@ def _step_event(entry: dict[str, Any], at: int) -> dict[str, Any]:
         "t": at,
         "seq": entry.get("seq"),
         "agent": node,
-        "title": title_of(node),
+        "title": _title(node),
         "summary": entry.get("summary"),
         "lane": entry.get("lane"),
         "model_id": entry.get("model_id"),

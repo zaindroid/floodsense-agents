@@ -223,6 +223,9 @@
         stroke-width: 2;
         opacity: 0;
       }
+      .map .plate.unused {
+        stroke-dasharray: 4 3;
+      }
       .map .plate.live {
         stroke: var(--river);
       }
@@ -300,6 +303,9 @@
       .feed li.err .what {
         color: var(--stop);
       }
+      .go[hidden] {
+        display: none;
+      }
       .foot {
         padding: 0 24px 28px;
         color: var(--soft);
@@ -337,6 +343,7 @@
         <span class="state" id="state"><i class="dot"></i> <b>idle</b></span>
         <select id="event" aria-label="Event"></select>
         <button class="go" id="run">Run analysis</button>
+        <button class="go" id="approve" hidden>Approve as zain</button>
       </div>
     </header>
 
@@ -348,7 +355,7 @@
           call that was made, a stage that finished. The animation is paced so it can
           be read; the server time in the panel is the real one.
         </p>
-        <svg class="map" id="map" viewBox="0 0 1180 470" role="img"
+        <svg class="map" id="map" viewBox="0 0 1320 470" role="img"
              aria-label="The agent pipeline, drawn as it runs"></svg>
         <p class="caption" id="srcnote"></p>
       </section>
@@ -363,6 +370,7 @@
           <div><span>SERVER TIME</span><b id="n-time">—</b></div>
           <div><span>DATA PATH</span><b id="n-path">—</b></div>
           <div class="wide"><span>MODEL LANES</span><b id="lanes">—</b></div>
+          <div class="wide"><span>MEMORY</span><b id="n-mem">—</b></div>
         </div>
         <h2>Event log</h2>
         <ul class="feed" id="feed"></ul>
@@ -389,14 +397,23 @@
         { key: "playbook", name: "Playbook", kind: "agent" },
         { key: "judge", name: "Judge", kind: "agent" },
         { key: "hitl", name: "Approval", kind: "sys" },
+        { key: "learn", name: "Learn", kind: "sys" },
       ];
-      // Two systems every stage may reach, over one bus rather than sixteen
-      // crossing wires. Both are the stack this is built on: the warehouse is
-      // Zetaris, and every model call goes through Meterless Nightshift.
+      // The three systems a stage may reach, over one bus rather than a
+      // thicket of crossing wires. All three are the stack this is built on:
+      // the warehouse is Zetaris, every model call goes through Meterless
+      // Nightshift, and the memory and the hypothesis board are the Meterless
+      // engines. The engines' sub line is rewritten once /config says whether
+      // they are plugged in.
       const SYSTEMS = {
-        views: { name: "Contract views", sub: "Zetaris", x: 270, w: 200 },
-        model: { name: "Meterless Nightshift", sub: "Nemotron lanes", x: 700, w: 240 },
+        views: { name: "Contract views", sub: "Zetaris", x: 250, w: 200 },
+        model: { name: "Meterless Nightshift", sub: "Nemotron lanes", x: 640, w: 240 },
+        engines: { name: "H-MEM · World model", sub: "Meterless engines", x: 1000, w: 230 },
       };
+      // Trace nodes that write to the engines instead of being a stage of
+      // their own: recall before the Investigator, the board after a stage.
+      const SIDE = { memory: "engines", world_model: "engines" };
+      let ENGINES_ON = false;
 
       // One mark each, drawn from what the thing does. The agent marks are
       // the ones the trace panel already uses, so a reader meets the same
@@ -418,6 +435,12 @@
         hitl:
           '<circle cx="10" cy="7" r="2.6"/>' +
           '<path d="M4.5 16c0-3 2.5-4.6 5.5-4.6s5.5 1.6 5.5 4.6"/>',
+        learn:
+          '<path d="M10 3.5v7.5"/><path d="M6.5 7.5 10 11l3.5-3.5"/>' +
+          '<path d="M4.5 14.5h11"/>',
+        engines:
+          '<rect x="3.5" y="4" width="13" height="12" rx="1.5"/>' +
+          '<path d="M3.5 8.5h13"/><path d="M8.5 8.5v7.5"/>',
         views:
           '<ellipse cx="10" cy="5.5" rx="6" ry="2.5"/>' +
           '<path d="M4 5.5v9c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-9"/>' +
@@ -538,7 +561,10 @@
         const left = Math.min(...centres);
         const right = Math.max(...centres);
         el("path", { d: `M ${left} ${RAIL_Y} H ${right}`, class: "wire bus" });
-        el("path", { d: `M 370 ${RAIL_Y} V ${SYS_Y}`, class: "wire" });
+        el("path", {
+          d: `M ${SYSTEMS.views.x + SYSTEMS.views.w / 2} ${RAIL_Y} V ${SYS_Y}`,
+          class: "wire",
+        });
         text(20, SRC_Y1 - 8, "FEDERATED SOURCES", "tag", null, "start");
       }
 
@@ -547,13 +573,16 @@
         sourceBand(sources || []);
 
         // the bus the stages reach the systems over
-        el("path", { d: `M ${X0 + 59} ${BUS_Y} H ${X0 + 7 * PITCH + 59}`, class: "wire bus" });
+        el("path", { d: `M ${X0 + 59} ${BUS_Y} H ${X0 + (STAGES.length - 1) * PITCH + 59}`, class: "wire bus" });
 
         for (const key in SYSTEMS) {
           const s = SYSTEMS[key];
           plate(key, s.x, SYS_Y, s.w, SYS_H, s.name, s.sub, "sys");
           el("path", { d: `M ${s.x + s.w / 2} ${SYS_Y + SYS_H} V ${BUS_Y}`, class: "wire" });
         }
+        // Drawing a block nothing can reach as though it were waiting its
+        // turn would be the one dishonest mark on this page.
+        if (!ENGINES_ON) nodes.engines.box.classList.add("unused");
 
         STAGES.forEach((stage, i) => {
           const x = X0 + i * PITCH;
@@ -647,7 +676,7 @@
       }
 
       // ---- counters and log ----------------------------------------------
-      const tally = { steps: 0, queries: 0, rows: 0, models: 0 };
+      const tally = { steps: 0, queries: 0, rows: 0, models: 0, mem: 0 };
       const put = (id, v) => (document.getElementById(id).textContent = v);
       const setState = (word, cls) => {
         const s = document.getElementById("state");
@@ -726,6 +755,17 @@
           return;
         }
         if (ev.type === "step") {
+          // Recall and the hypothesis board are writes to the engines rather
+          // than stages, so they belong to whichever stage is running.
+          const side = SIDE[ev.agent];
+          if (side) {
+            tally.mem += 1;
+            put("n-mem", tally.mem + (tally.mem === 1 ? " write" : " writes"));
+            shoot(running() + ">" + side, "#35607a");
+            flash(side, "live");
+            log(ev.t, ev.title || ev.agent, ev.summary || "", false);
+            return;
+          }
           const key = ev.agent === "revise" ? "skeptic" : ev.agent;
           const at = STAGES.findIndex((st) => st.key === key);
           if (at > DONE_TO) DONE_TO = at;
@@ -733,6 +773,14 @@
           put("n-steps", tally.steps);
           if (ev.agent === "revise") shoot("revise", "#9a6b1f");
           else shoot("step:" + key, "#35607a");
+          if (key === "learn") {
+            // Learn is a stage of the graph and a write to the engines at
+            // once, so it counts in both places.
+            tally.mem += 1;
+            put("n-mem", tally.mem + (tally.mem === 1 ? " write" : " writes"));
+            shoot("learn>engines", "#35607a");
+            flash("engines", "live");
+          }
           flash(key, "done");
           log(ev.t, ev.title || key, ev.summary || "", false);
           return;
@@ -741,7 +789,12 @@
           const ok = ev.status === "awaiting_approval" || ev.status === "approved";
           setState(ev.status.replace(/_/g, " "), ok ? "ok" : "bad");
           if (ev.elapsed_ms) put("n-time", (ev.elapsed_ms / 1000).toFixed(1) + "s");
-          if (ev.status === "awaiting_approval") flash("hitl", "live");
+          if (ev.status === "awaiting_approval") {
+            flash("hitl", "live");
+            PAUSED = ev.run_id;
+            SEEN = ev.steps || 0;
+            document.getElementById("approve").hidden = false;
+          }
           log(ev.t, "run", ev.error || ev.status.replace(/_/g, " "));
           document.getElementById("run").disabled = false;
           if (ev.run_id) {
@@ -794,15 +847,64 @@
         };
       }
 
+      // ---- the human half -----------------------------------------------
+      // The graph interrupts at the approval and the last stages only run if
+      // someone decides, so the drawing cannot finish without this. The
+      // decision is real: it releases the outbound actions and is what the
+      // learn step writes to memory.
+      let PAUSED = null;
+      let SEEN = 0;
+
+      async function approve() {
+        const button = document.getElementById("approve");
+        button.disabled = true;
+        const run_id = PAUSED;
+        try {
+          const r = await fetch("/runs/" + run_id + "/approval", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "approve", reviewer: "zain" }),
+          });
+          if (!r.ok) throw new Error("the service refused the approval");
+          // The stream closed at the interrupt, so the stages after it are
+          // read back from the run's own trace rather than invented here.
+          const run = await fetch("/runs/" + run_id).then((x) => x.json());
+          (run.trace || []).slice(SEEN).forEach((e) => {
+            Q.push({
+              type: "step",
+              t: 0,
+              agent: e.node,
+              title: TITLES[e.node] || e.node,
+              summary: e.summary,
+            });
+          });
+          setState("approved", "ok");
+          button.hidden = true;
+          if (!draining) drain();
+        } catch (e) {
+          log(0, "approval", String(e.message || e), true);
+          button.disabled = false;
+        }
+      }
+
+      // The server names these on the stream; a trace read back here has
+      // only the node ids, so the same two names live in both places.
+      const TITLES = { hitl: "Human approval", learn: "Memory write" };
+
       async function start() {
         const button = document.getElementById("run");
         button.disabled = true;
         feed.innerHTML = "";
         DONE_TO = -1;
-        tally.steps = tally.queries = tally.rows = tally.models = 0;
+        tally.steps = tally.queries = tally.rows = tally.models = tally.mem = 0;
         ["n-steps", "n-queries", "n-rows", "n-models"].forEach((id) => put(id, 0));
         put("n-time", "—");
         put("n-path", "—");
+        if (ENGINES_ON) put("n-mem", "0 writes");
+        PAUSED = null;
+        const approveButton = document.getElementById("approve");
+        approveButton.hidden = true;
+        approveButton.disabled = false;
         Object.values(nodes).forEach((n) => n.box.classList.remove("live", "done", "bad"));
         setState("starting", "on");
         try {
@@ -846,6 +948,13 @@
             cfg.lanes.fast + " / " + cfg.lanes.deep;
         }
 
+        // FF_HMEM alone is not enough: with no ENGINES_URL the graph keeps
+        // its no-op memory, so both have to hold before anything is written.
+        const flags = cfg.flags || {};
+        ENGINES_ON = Boolean(flags.FF_HMEM && cfg.engines_url);
+        SYSTEMS.engines.sub = ENGINES_ON ? "Meterless engines" : "not configured";
+        put("n-mem", ENGINES_ON ? "0 writes" : flags.FF_HMEM ? "ENGINES_URL unset" : "FF_HMEM off");
+
         draw(prov ? prov.sources || [] : []);
         if (!prov) {
           const note = document.getElementById("srcnote");
@@ -858,6 +967,7 @@
 
       init();
       document.getElementById("run").addEventListener("click", start);
+      document.getElementById("approve").addEventListener("click", approve);
     </script>
   </body>
 </html>
