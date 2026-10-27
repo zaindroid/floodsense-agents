@@ -40,15 +40,15 @@
   // these marks per gauge, so "high" is this river's high, not a global line.
   function place(st) {
     const level = num(st.level_cm);
-    const mnw = num(st.mnw_cm);
     const mw = num(st.mw_cm);
     const mhw = num(st.mhw_cm);
     const hhw = num(st.hhw_cm);
     if (level == null || mhw == null) return null;
-    const lo = mnw != null ? mnw : mw != null ? mw : 0;
+    // From gauge zero to the highest mark: a level under mean low water is a
+    // real reading, and anchoring the scale at MNW would draw it as nothing.
     const hi = Math.max(hhw != null ? hhw : mhw, mhw, level);
-    if (!(hi > lo)) return null;
-    const at = (v) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+    if (!(hi > 0)) return null;
+    const at = (v) => Math.max(0, Math.min(100, (v / hi) * 100));
     return { level: at(level), mhw: at(mhw), mw: mw == null ? null : at(mw) };
   }
 
