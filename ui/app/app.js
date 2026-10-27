@@ -105,8 +105,11 @@ async function desk() {
         );
       })
       .join("") +
-    "</div>";
+    "</div>" +
+    '<section class="area"><h2 class="sec">Where the rivers stand now</h2>' +
+    '<div id="rivers"><p class="note">Reading the gauges…</p></div></section>';
   screen.className = "seq";
+  window.drawRivers(document.getElementById("rivers"));
   screen.querySelectorAll(".case").forEach((b) =>
     b.addEventListener("click", () => {
       location.hash = "#/case/" + b.dataset.id;
@@ -204,6 +207,8 @@ function drawCase(eventId) {
     "</section>" +
     (released ? artifactsHtml(run) : "") +
     workingHtml(run) +
+    '<section class="area"><h2 class="sec">The event, hour by hour</h2>' +
+    '<div id="series"><p class="note">Reading the hours…</p></div></section>' +
     '<section class="area"><h2 class="sec">What was knowable, and when</h2>' +
     '<div id="timeline"><p class="note">Replaying the event\u2026</p></div></section>' +
     askHtml(eventId);
@@ -214,6 +219,7 @@ function drawCase(eventId) {
   wireAsk(eventId);
   countUp();
   drawFlow(run.run_id);
+  window.drawSeries(eventId, document.getElementById("series"));
   drawTimeline(eventId);
 }
 

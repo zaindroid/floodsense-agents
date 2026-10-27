@@ -1015,3 +1015,239 @@ details.work > summary:hover {
     grid-column: 2;
   }
 }
+
+/* Rivers now --------------------------------------------------------------- */
+
+.gauges {
+  border-top: 1px solid var(--rule);
+}
+
+.gauge {
+  border-bottom: 1px solid var(--rule);
+  animation: rise 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) var(--d) both;
+}
+
+.g-head {
+  display: grid;
+  grid-template-columns: 13em 1fr 11em 5.5em;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 11px 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.g-head:hover {
+  background: var(--wash);
+}
+
+.g-name {
+  font-weight: 500;
+}
+
+.g-name i {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--soft);
+  text-transform: lowercase;
+}
+
+.g-track {
+  position: relative;
+  display: block;
+  height: 6px;
+  background: var(--wash);
+  border: 1px solid var(--rule);
+}
+
+.g-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--river);
+  transform-origin: left;
+  animation: draw 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) var(--d) both;
+  transform: scaleX(0);
+}
+
+/* The gauge's own marks, so "high" is this river's high. */
+.g-at {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 1px;
+  background: var(--soft);
+}
+
+.g-at.mhw {
+  background: var(--hold);
+  width: 2px;
+}
+
+.g-none {
+  font-size: 12px;
+  color: var(--soft);
+}
+
+.g-read {
+  font-variant-numeric: tabular-nums;
+}
+
+.g-read .t {
+  display: block;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--soft);
+}
+
+.g-read .t.up {
+  color: var(--hold);
+}
+
+.g-more {
+  padding: 2px 2px 16px;
+}
+
+.marks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+}
+
+.marks dt {
+  font-size: 12px;
+  color: var(--soft);
+}
+
+.marks dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.marks dd.why {
+  font-size: 12px;
+  color: var(--soft);
+}
+
+/* The event, hour by hour -------------------------------------------------- */
+
+.s-wrap {
+  position: relative;
+  margin-top: 6px;
+}
+
+.series {
+  display: block;
+  width: 100%;
+  height: 186px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.r-bar {
+  fill: var(--river);
+  opacity: 0.3;
+}
+
+.r-line {
+  fill: none;
+  stroke: var(--river);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.r-now {
+  stroke: var(--ink);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.s-peak {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--soft);
+  margin-top: 4px;
+}
+
+.s-moments {
+  position: relative;
+  height: 14px;
+}
+
+.s-m {
+  position: absolute;
+  top: 0;
+  width: 16px;
+  margin-left: -8px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.s-m span {
+  display: block;
+  width: 7px;
+  height: 7px;
+  margin: 3px auto;
+  border: 1px solid var(--soft);
+  background: var(--paper);
+  transform: rotate(45deg);
+}
+
+.s-m[aria-current="true"] span {
+  background: var(--hold);
+  border-color: var(--hold);
+}
+
+.s-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.s-bar input[type="range"] {
+  flex: 1;
+  accent-color: var(--river);
+}
+
+.s-say {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 20px;
+  margin-top: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.s-fig {
+  font-size: 13px;
+  color: var(--soft);
+}
+
+.s-fig b {
+  color: var(--ink);
+}
+
+.s-moment {
+  font-size: 13px;
+  color: var(--hold);
+}
+
+@media (max-width: 720px) {
+  .g-head {
+    grid-template-columns: 1fr 5.5em;
+    gap: 8px;
+  }
+
+  .g-scale {
+    display: none;
+  }
+}

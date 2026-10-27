@@ -53,7 +53,7 @@ from floodsense_agents.models import RunRequest
 from floodsense_agents.readiness import report as readiness_report
 from floodsense_agents.settings import settings
 
-from console import desk, live
+from console import desk, live, warehouse
 from console.verify import report as verify_report
 
 HERE = Path(__file__).resolve().parent
@@ -151,6 +151,8 @@ OURS = (
     "/desk/events",
     "/desk/events/{event_id}",
     "/desk/events/{event_id}/timeline",
+    "/desk/events/{event_id}/series",
+    "/desk/rivers",
     "/desk/dispatch-target",
     "/readiness",
     "/runs/{run_id}/outbound",
@@ -251,6 +253,75 @@ def desk_timeline(event_id: str):
     }
     _TIMELINE[event_id] = body
     return _live(dict(body))
+
+
+@app.get("/desk/rivers", include_in_schema=False)
+def desk_rivers():
+    """Where the rivers stand right now, from gauge_levels.
+
+    PEGELONLINE publishes a level and the station's own characteristic marks,
+    so "high" is the gauge's own MHW rather than a number this app invented.
+    is_stale comes from the view: a station the poller could not reach keeps
+    its last row and says so, instead of looking current.
+    """
+    view = f"{settings.schema}.gauge_levels"
+    full = (
+        "SELECT station, water, ts_utc, level_cm, trend_cm_h, mw_cm, mhw_cm, hhw_cm, "
+        f"hsw_cm, band, is_stale, river_km, fetched_at FROM {view} ORDER BY river_km"
+    )
+    # The marks arrived with migration 046. An engine still on 037 has the
+    # five original columns, so ask for those rather than show nothing.
+    plain = f"SELECT station, water, ts_utc, level_cm FROM {view} ORDER BY station"
+    try:
+        rows, marks = warehouse.rows(full), True
+    except warehouse.WarehouseError:
+        try:
+            rows, marks = warehouse.rows(plain), False
+        except warehouse.WarehouseError as e:
+            raise HTTPException(503, f"{view}: {e}") from e
+    return _live({"view": view, "stations": rows, "count": len(rows), "marks": marks})
+
+
+@app.get("/desk/events/{event_id}/series", include_in_schema=False)
+def desk_series(event_id: str):
+    """The event's hourly rain and discharge, every row, for the replay.
+
+    The window alone separates the events -- the Ahr is 2021 and Valencia is
+    2024 -- so this does not have to know either one's point ids. The live
+    views carry Valencia only, so an event the live schema cannot answer is
+    read from the seed schema and the reply says which one answered.
+    """
+    try:
+        ev = spec(event_id)
+    except KeyError as e:
+        raise HTTPException(400, str(e).strip('"')) from e
+    window = f"WHERE ts_utc BETWEEN '{ev.window_from_utc}' AND '{ev.window_to_utc}'"
+    tried: list[str] = []
+    for schema in dict.fromkeys((settings.schema, "floodsense_seed")):
+        view = f"{schema}.hazard_timeline"
+        tried.append(view)
+        try:
+            rows = warehouse.rows(
+                f"SELECT point_id, ts_utc, rain_mm, discharge_m3s FROM {view} "
+                f"{window} ORDER BY ts_utc, point_id"
+            )
+        except warehouse.WarehouseError as e:
+            raise HTTPException(503, f"{view}: {e}") from e
+        if rows:
+            return _live(
+                {
+                    "event_id": ev.event_id,
+                    "name": ev.name,
+                    "view": view,
+                    "from_utc": ev.window_from_utc,
+                    "to_utc": ev.window_to_utc,
+                    "moments": [{"ts": t, "label": lab} for t, lab in ev.moments],
+                    "footprint_published_utc": ev.footprint_published_utc,
+                    "readings": rows,
+                    "count": len(rows),
+                }
+            )
+    raise HTTPException(404, f"no rows for {ev.event_id} in {' or '.join(tried)}")
 
 
 @app.get("/desk/dispatch-target", include_in_schema=False)
