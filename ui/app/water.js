@@ -229,11 +229,15 @@
       box.innerHTML = '<p class="note">The warehouse holds no hourly rows for this event.</p>';
       return;
     }
-    // Each declared moment lands on the last hour at or before it.
+    // Each declared moment lands on the last hour at or before it. Both sides
+    // are normalised first: Zetaris separates date and time with a space and
+    // the event spec with "T", and " " sorts below "T", so comparing them raw
+    // made every moment on a day match every hour of it.
+    const hourKey = (ts) => String(ts).replace(" ", "T").slice(0, 13);
     const moments = (data.moments || []).map((m) => {
       let at = 0;
       hours.forEach((h, i) => {
-        if (h.ts.slice(0, 13) <= String(m.ts).slice(0, 13)) at = i;
+        if (hourKey(h.ts) <= hourKey(m.ts)) at = i;
       });
       return { i: at, label: m.label, ts: m.ts };
     });
